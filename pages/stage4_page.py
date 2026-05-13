@@ -93,20 +93,19 @@ class Stage4Page(QWidget):
 
         self.surface_input = QDoubleSpinBox()
 
-        self.surface_input.setValue(1150)
+        # ✅ 关键设置（按顺序）
+        self.surface_input.setRange(0, 999999)  # 范围 0~999999
+        self.surface_input.setDecimals(2)  # 2 位小数
+        self.surface_input.setSingleStep(10)  # 步长 10
+        self.surface_input.setValue(1150)  # 设置值 1150
+        self.surface_input.setPrefix("Surface Area: ")  # 前缀
 
-        self.surface_input.setMaximum(
-            999999
-        )
+        # ✅ 强制刷新
+        self.surface_input.update()
 
-        self.surface_input.setPrefix(
-            "Surface Area: "
-        )
-
+        # 添加到布局
         row2.addWidget(self.porosity_input)
-
         row2.addWidget(self.tau_input)
-
         row2.addWidget(self.surface_input)
 
         param_layout.addLayout(row2)
