@@ -471,8 +471,10 @@ def start_server():
         app,
         host="127.0.0.1",
         port=8000,
-        log_level="info"
+        log_level="info",
+        reload=False
     )
+
 
 #  原来的入口（保留，方便单独测试）
 if __name__ == "__main__":

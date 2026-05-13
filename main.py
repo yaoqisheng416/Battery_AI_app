@@ -582,99 +582,100 @@ def run_api_server():
     start_server()
 
 
+def wait_for_api(host="127.0.0.1", port=8000, timeout=15):
+
+    print(f"正在检测后端 API（{host}:{port}）...")
+
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+
+            result = sock.connect_ex((host, port))
+
+            sock.close()
+
+            if result == 0:
+                print(f"后端 API 已启动（端口 {port}）")
+                return True
+
+        except:
+            pass
+
+        time.sleep(0.5)
+
+    return False
+
+
 if __name__ == "__main__":
-    # ============================================
-    # ✅ 检测后端 API 是否启动（检测端口）
-    # ============================================
-    def wait_for_api(host="127.0.0.1", port=8000, timeout=15):
-        """等待后端 API 启动完成（检测端口）"""
-        print(f" 正在检测后端 API（{host}:{port}）...")
-        start_time = time.time()
 
-        while time.time() - start_time < timeout:
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(1)
-                result = sock.connect_ex((host, port))
-                sock.close()
-
-                if result == 0:  # ✅ 端口已监听
-                    print(f" 后端 API 已启动（端口 {port}）")
-                    return True
-            except Exception as e:
-                pass
-
-            time.sleep(0.5)  # 每 0.5 秒检测一次
-
-        print(f" 后端 API 启动超时（{timeout}秒）")
-        return False
-
-    # ============================================
-    # ✅ 启动后端 API（多进程）
-    # ============================================
-    def run_api_server():
-        """在子进程中运行后端 API"""
-        start_server()
+    # =====================================
+    # PyInstaller 多进程必须
+    # =====================================
+    multiprocessing.freeze_support()
 
     print("=" * 50)
-    print(" 开始启动应用...")
+    print("开始启动应用...")
     print("=" * 50)
 
     app = QApplication(sys.argv)
 
-    # ============================================
-    # 1. 启动后端 API（多进程）
-    # ============================================
-    print(" [1] 正在启动后端 API...")
-    api_process = multiprocessing.Process(target=run_api_server)
+    # =====================================
+    # 启动 API
+    # =====================================
+    print("[1] 启动后端 API...")
+
+    api_process = multiprocessing.Process(
+        target=run_api_server,
+        daemon=True
+    )
+
     api_process.start()
-    print(f" 后端 API 进程已启动，PID: {api_process.pid}")
 
-    # ============================================
-    # 2. ✅ 关键：等待后端完全启动（检测端口）
-    # ============================================
-    print(" [2] 正在等待后端 API 启动完成...")
-    if not wait_for_api(timeout=15):
-        print(" 后端启动失败，程序退出")
+    print(f"API PID: {api_process.pid}")
+
+    # =====================================
+    # 等待 API
+    # =====================================
+    print("[2] 等待 API 启动...")
+
+    if not wait_for_api():
+
+        print("API 启动失败")
+
         api_process.terminate()
-        api_process.join(timeout=2)
+
         sys.exit(1)
 
-    print(" [3] 后端 API 已就绪，准备启动 GUI...")
+    # =====================================
+    # 启动 GUI
+    # =====================================
+    print("[3] 启动 GUI...")
 
-    # ============================================
-    # 3. ✅ 后端启动完成后，才启动 GUI
-    # ============================================
-    print(" [4] 正在启动 GUI...")
-    try:
-        window = MainWindow()
-        window.show()
-        print(" GUI 已启动")
-    except Exception as e:
-        print(f" GUI 启动失败: {e}")
-        import traceback
+    window = MainWindow()
 
-        traceback.print_exc()  # ✅ 打印完整错误
-        api_process.terminate()
-        api_process.join(timeout=2)
-        sys.exit(1)
+    window.show()
 
-
-    # ============================================
-    # 4. 关闭 GUI 时自动关闭后端
-    # ============================================
+    # =====================================
+    # 清理
+    # =====================================
     def cleanup():
-        if api_process.is_alive():
-            print(" 正在关闭后端 API...")
-            api_process.terminate()
-            api_process.join(timeout=3)
-            print(" 后端 API 已关闭")
 
+        if api_process.is_alive():
+
+            print("关闭 API...")
+
+            api_process.terminate()
+
+            api_process.join(timeout=3)
 
     app.aboutToQuit.connect(cleanup)
 
     print("=" * 50)
-    print(" 应用已启动，GUI 运行中...")
+    print("GUI 已启动")
     print("=" * 50)
 
     sys.exit(app.exec())
