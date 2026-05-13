@@ -143,8 +143,8 @@ class MainWindow(QMainWindow):
         self.stage1_page = Stage1Page()
         self.stage2_page = Stage2Page()
         self.stage3_page = Stage3Page()
-        self.stage4_page = Stage4Page()
-        self.stage6_page = Stage6Page()
+        self.stage4_page = Stage4Page(self)
+        self.stage6_page = Stage6Page(self)
         self.history_page = HistoryPage()
 
         self.stack.addWidget(self.stage1_page)
