@@ -21,9 +21,9 @@ from api_client import (
 
 class Stage4Page(QWidget):
 
-    def __init__(self, main_window):  # ✅ 接收 MainWindow 引用
+    def __init__(self, main_window):  # 接收 MainWindow 引用
         super().__init__()
-        self.main_window = main_window  # ✅ 保存引用
+        self.main_window = main_window  # 保存引用
         self.task_id = None
 
         root_layout = QVBoxLayout(self)
@@ -106,7 +106,7 @@ class Stage4Page(QWidget):
         root_layout.addWidget(param_group)
 
         # ============================================
-        # 输出目录选择（✅ 新增）
+        # 输出目录选择（ 新增）
         # ============================================
         # output_group = QGroupBox("输出目录")
         # output_layout = QHBoxLayout(output_group)
@@ -127,7 +127,7 @@ class Stage4Page(QWidget):
         # root_layout.addWidget(output_group)
 
         # ============================================
-        # 按钮区域（✅ 修改）
+        # 按钮区域（ 修改）
         # ============================================
         btn_layout = QHBoxLayout()
 

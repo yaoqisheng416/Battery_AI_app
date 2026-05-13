@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
+import multiprocessing
+import socket
+import subprocess
 import sys
+import time
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
@@ -17,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget, QPushButton, QScrollArea,
 )
 
+from backend.api_server import start_server
 from pages.history_page import HistoryPage
 from pages.stage1_page import Stage1Page
 from pages.stage2_page import Stage2Page
@@ -59,7 +64,7 @@ class MainWindow(QMainWindow):
         title = QLabel("🧪 极片三维数字孪生模型训练与推理应用")
         title.setObjectName("mainTitle")
 
-        # ✅ 换成 QLabel
+        #  换成 QLabel
         desc = QLabel(
             "该平台用于：\n\n"
             "• Stage1~3：模型训练\n"
@@ -90,7 +95,7 @@ class MainWindow(QMainWindow):
         title_layout.addWidget(title)
         title_layout.addWidget(desc)
 
-        root_layout.addWidget(title_frame)  # ✅ 自适应高度
+        root_layout.addWidget(title_frame)  # 自适应高度
 
         # ========== 主题切换按钮 ==========
         theme_bar = QHBoxLayout()
@@ -112,8 +117,8 @@ class MainWindow(QMainWindow):
         # ========== 主体区域（QScrollArea 包裹）==========
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # 水平滚动条：已隐藏 ✅
-        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # ✅ 垂直滚动条：永久隐藏
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # 水平滚动条：已隐藏 
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)  # 垂直滚动条：永久隐藏
 
         body_widget = QWidget()
         body_layout = QHBoxLayout(body_widget)
@@ -529,7 +534,7 @@ class MainWindow(QMainWindow):
                 }
             """)
 
-        # ✅ 更新主题按钮样式（保持不变）
+        #  更新主题按钮样式（保持不变）
         if self.current_theme == "dark":
             self.theme_btn_dark.setStyleSheet("""
                 QPushButton {
@@ -572,11 +577,104 @@ class MainWindow(QMainWindow):
             """)
 
 
+def run_api_server():
+    """在子进程中运行后端 API"""
+    start_server()
+
+
 if __name__ == "__main__":
+    # ============================================
+    # ✅ 检测后端 API 是否启动（检测端口）
+    # ============================================
+    def wait_for_api(host="127.0.0.1", port=8000, timeout=15):
+        """等待后端 API 启动完成（检测端口）"""
+        print(f" 正在检测后端 API（{host}:{port}）...")
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(1)
+                result = sock.connect_ex((host, port))
+                sock.close()
+
+                if result == 0:  # ✅ 端口已监听
+                    print(f" 后端 API 已启动（端口 {port}）")
+                    return True
+            except Exception as e:
+                pass
+
+            time.sleep(0.5)  # 每 0.5 秒检测一次
+
+        print(f" 后端 API 启动超时（{timeout}秒）")
+        return False
+
+    # ============================================
+    # ✅ 启动后端 API（多进程）
+    # ============================================
+    def run_api_server():
+        """在子进程中运行后端 API"""
+        start_server()
+
+    print("=" * 50)
+    print(" 开始启动应用...")
+    print("=" * 50)
+
     app = QApplication(sys.argv)
 
-    win = MainWindow()
+    # ============================================
+    # 1. 启动后端 API（多进程）
+    # ============================================
+    print(" [1] 正在启动后端 API...")
+    api_process = multiprocessing.Process(target=run_api_server)
+    api_process.start()
+    print(f" 后端 API 进程已启动，PID: {api_process.pid}")
 
-    win.show()
+    # ============================================
+    # 2. ✅ 关键：等待后端完全启动（检测端口）
+    # ============================================
+    print(" [2] 正在等待后端 API 启动完成...")
+    if not wait_for_api(timeout=15):
+        print(" 后端启动失败，程序退出")
+        api_process.terminate()
+        api_process.join(timeout=2)
+        sys.exit(1)
+
+    print(" [3] 后端 API 已就绪，准备启动 GUI...")
+
+    # ============================================
+    # 3. ✅ 后端启动完成后，才启动 GUI
+    # ============================================
+    print(" [4] 正在启动 GUI...")
+    try:
+        window = MainWindow()
+        window.show()
+        print(" GUI 已启动")
+    except Exception as e:
+        print(f" GUI 启动失败: {e}")
+        import traceback
+
+        traceback.print_exc()  # ✅ 打印完整错误
+        api_process.terminate()
+        api_process.join(timeout=2)
+        sys.exit(1)
+
+
+    # ============================================
+    # 4. 关闭 GUI 时自动关闭后端
+    # ============================================
+    def cleanup():
+        if api_process.is_alive():
+            print(" 正在关闭后端 API...")
+            api_process.terminate()
+            api_process.join(timeout=3)
+            print(" 后端 API 已关闭")
+
+
+    app.aboutToQuit.connect(cleanup)
+
+    print("=" * 50)
+    print(" 应用已启动，GUI 运行中...")
+    print("=" * 50)
 
     sys.exit(app.exec())

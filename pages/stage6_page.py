@@ -63,7 +63,7 @@ class Stage6Page(QWidget):
 
         self.tabs = QTabWidget()
 
-        # ✅ 设置 Tab 标题样式
+        #  设置 Tab 标题样式
         self.tabs.setStyleSheet("""
             QTabWidget::pane {
                 border: 1px solid #444;
@@ -74,21 +74,21 @@ class Stage6Page(QWidget):
             QTabBar::tab {
                 background: #25262b;
                 color: white;
-                padding: 12px 24px;        /* ✅ 内边距，让文字更饱满 */
-                font-size: 14px;           /* ✅ Tab 标题字体大小（从 10 → 14） */
-                font-weight: bold;         /* ✅ 加粗 */
+                padding: 12px 24px;        /*  内边距，让文字更饱满 */
+                font-size: 14px;           /*  Tab 标题字体大小（从 10 → 14） */
+                font-weight: bold;         /*  加粗 */
                 border-top-left-radius: 8px;
                 border-top-right-radius: 8px;
-                margin-right: 5px;         /* ✅ Tab 之间的间距 */
+                margin-right: 5px;         /*  Tab 之间的间距 */
             }
 
             QTabBar::tab:selected {
-                background: #4f8cff;       /* ✅ 选中时蓝色背景 */
+                background: #4f8cff;       /*  选中时蓝色背景 */
                 color: white;
             }
 
             QTabBar::tab:hover {
-                background: #3a3b3f;       /* ✅ 悬停时灰色背景 */
+                background: #3a3b3f;       /*  悬停时灰色背景 */
             }
         """)
 
@@ -122,7 +122,7 @@ class Stage6Page(QWidget):
     # TAB1
     # ========================================================
     def build_generate_tab(self):
-        layout = QVBoxLayout(self.tab_generate)  # ✅ 改为垂直布局
+        layout = QVBoxLayout(self.tab_generate)  #  改为垂直布局
         layout.setSpacing(15)
 
         # 顶部提示
@@ -187,7 +187,7 @@ class Stage6Page(QWidget):
 
         self.target_cbd = QDoubleSpinBox()
         self.target_cbd.setRange(0, 999999)  # 强制范围
-        self.target_cbd.setSingleStep(0.001)  # ✅ 每次增减 0.001
+        self.target_cbd.setSingleStep(0.001)  #  每次增减 0.001
         self.target_cbd.setDecimals(4)
         self.target_cbd.setValue(0.05)
         self.target_cbd.setMinimumWidth(150)
@@ -249,8 +249,8 @@ class Stage6Page(QWidget):
         voxel_layout.setSpacing(15)
 
         self.voxel_x = QDoubleSpinBox()
-        self.voxel_x.setRange(0, 999999)  # ✅ 强制范围
-        self.voxel_x.setSingleStep(0.0001)  # ✅ 每次增减 0.0001
+        self.voxel_x.setRange(0, 999999)  #  强制范围
+        self.voxel_x.setSingleStep(0.0001)  #  每次增减 0.0001
         self.voxel_x.setDecimals(5)
         self.voxel_x.setValue(0.02791)
         self.voxel_x.setMinimumWidth(120)
@@ -287,14 +287,14 @@ class Stage6Page(QWidget):
         adv_layout.setSpacing(15)
 
         self.max_growth = QDoubleSpinBox()
-        self.max_growth.setRange(0, 999999)  # ✅ 强制范围
-        self.max_growth.setSingleStep(0.1)  # ✅ 每次增减 0.1
+        self.max_growth.setRange(0, 999999)  #  强制范围
+        self.max_growth.setSingleStep(0.1)  #  每次增减 0.1
         self.max_growth.setDecimals(2)
         self.max_growth.setValue(4.0)
         self.max_growth.setMinimumWidth(120)
 
         self.seed = QSpinBox()
-        self.seed.setRange(0, 999999)  # ✅ 强制范围
+        self.seed.setRange(0, 999999)  #  强制范围
         self.seed.setSingleStep(1)
         self.seed.setValue(42)
         self.seed.setMinimumWidth(120)
@@ -399,7 +399,7 @@ class Stage6Page(QWidget):
         # ============================================
         msg = QMessageBox(self)
         msg.setWindowTitle("任务已提交")
-        msg.setText("✅ CBD三相结构生成任务已提交！")
+        msg.setText(" CBD三相结构生成任务已提交！")
         msg.setInformativeText(
             "任务正在后台运行，请前往「历史任务中心」查看进度和结果。"
         )
@@ -417,29 +417,29 @@ class Stage6Page(QWidget):
     def reset_generate_params(self):
         """恢复所有参数为默认值"""
 
-        # ✅ 清空文件
+        #  清空文件
         self.file_edit.clear()
 
-        # ✅ 恢复 CBD 参数
+        #  恢复 CBD 参数
         self.target_cbd.setValue(0.05)
         self.w_um.setValue(0.08)
 
-        # ✅ 恢复相标签
-        self.pore_value.setValue(0)  # ✅ 默认值（根据你的实际需求）
+        #  恢复相标签
+        self.pore_value.setValue(0)  #  默认值（根据你的实际需求）
         self.am_value.setValue(1)
         self.cbd_value.setValue(2)
 
-        # ✅ 恢复 Voxel Size
+        #  恢复 Voxel Size
         self.voxel_x.setValue(0.02791)
         self.voxel_y.setValue(0.0315)
         self.voxel_z.setValue(0.02791)
 
-        # ✅ 恢复高级参数
+        #  恢复高级参数
         self.max_growth.setValue(4.0)
         self.seed.setValue(42)
         self.remove_isolated.setChecked(True)
 
-        # ✅ 提示
+        #  提示
         QMessageBox.information(self, "已恢复", "所有参数已恢复为默认值！")
 
     # ========================================================
@@ -819,7 +819,7 @@ class Stage6Page(QWidget):
         # ============================================
         msg = QMessageBox(self)
         msg.setWindowTitle("任务已提交")
-        msg.setText("✅ CBD参数拟合任务已提交！")
+        msg.setText(" CBD参数拟合任务已提交！")
         msg.setInformativeText(
             "任务正在后台运行，请前往「历史任务中心」查看进度和结果。"
         )
