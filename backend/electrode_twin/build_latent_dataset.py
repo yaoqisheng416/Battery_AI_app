@@ -45,7 +45,8 @@ OUTPUT_DIR = os.path.join(
 # CKPT_PATH = r"checkpoints\vae-epoch045-valloss-1.9100.ckpt"
 # OUTPUT_DIR = r"latent_dataset"
 
-DEVICE = "cpu"
+# DEVICE = "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 # ==============================

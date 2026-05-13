@@ -55,8 +55,10 @@ OUT_DIR = os.path.join(
 # SUMMARY_JSON_PATH = r"./latent_dataset/dataset_summary.json"
 # OUT_DIR = r"./generated_results"
 
-DEVICE = "cpu"
-NUM_SAMPLES = 32
+# DEVICE = "cpu"
+# NUM_SAMPLES = 32
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+NUM_SAMPLES = 128 if torch.cuda.is_available() else 32
 
 # 你现在真正要控制的 3 个目标
 TARGET_CONDITION = {

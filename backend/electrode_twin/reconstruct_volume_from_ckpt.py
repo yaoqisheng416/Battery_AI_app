@@ -63,7 +63,8 @@ REV_X = 253
 # 9. 设备
 #    有显卡就 "cuda"
 #    没显卡就 "cpu"
-DEVICE = "cpu"
+# DEVICE = "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 # ============================================================
