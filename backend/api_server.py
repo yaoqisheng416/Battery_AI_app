@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 import os
+import sys
 import tempfile
 import threading
 import zipfile
+import logging
 from datetime import datetime
 from http.client import HTTPException
 import uvicorn
@@ -20,6 +22,20 @@ from backend.core.task_manager import (
 
 from backend.tasks.stage4_task import run_stage4_task
 from backend.tasks.stage6_task import run_stage6_cbd_fit_task, run_stage6_cbd_generate_task
+
+logger = logging.getLogger("cbd_w_fitting_service")
+
+if not logger.handlers:
+    handler = logging.StreamHandler()
+
+    formatter = logging.Formatter(
+        "%(asctime)s [%(levelname)s] [%(name)s] %(message)s"
+    )
+
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
+logger.setLevel(logging.INFO)
 
 app = FastAPI()
 
@@ -61,8 +77,22 @@ def get_all_tasks():
 def create_stage4_task(
         request: Stage4Request
 ):
-    task_id = create_task(title="Stage4 条件可控的两相结构生成")
+    if request.task_id is not None \
+            and str(request.task_id).strip() != "":
 
+        task_id = request.task_id
+
+    else:
+        task_id = create_task(title="Stage4 条件可控的两相结构生成")
+    
+    #  打印日志（调试用）
+    print(f"[Stage4] 任务ID: {task_id}")
+    print(f"[Stage4] VAE路径: {request.vae_path}")
+    print(f"[Stage4] LDM路径: {request.ldm_path}")
+    print(f"[Stage4] Porosity: {request.porosity}")
+    print(f"[Stage4] Tau Z: {request.tau_z}")
+    print(f"[Stage4] Surface Area: {request.surface_area}")
+    
     thread = threading.Thread(
         target=run_stage4_task,
         args=(task_id, request),
@@ -161,119 +191,67 @@ def create_stage6_task(
 
 
 # 模型选择
+def get_base_dir():
+    """智能判断：打包后用exe目录，本地用脚本目录"""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    else:
+        return os.path.dirname(os.path.abspath(__file__))
+
+
 @app.get("/models/versions")
 def get_model_versions():
-    model_root = "models"
+    BASE_DIR = get_base_dir()
 
-    versions = []
+    # 智能切换路径
+    if getattr(sys, 'frozen', False):
+        vae_dir = os.path.join(BASE_DIR, "checkpoints")
+        ldm_dir = os.path.join(BASE_DIR, "ldm_checkpoints")
+        print(f"[打包模式] VAE: {vae_dir}")
+        print(f"[打包模式] LDM: {ldm_dir}")
+    else:
+        vae_dir = os.path.join(BASE_DIR, "electrode_twin", "checkpoints")
+        ldm_dir = os.path.join(BASE_DIR, "electrode_twin", "ldm_checkpoints")
+        print(f"[本地模式] VAE: {vae_dir}")
+        print(f"[本地模式] LDM: {ldm_dir}")
 
-    if not os.path.exists(model_root):
-        return {
-            "versions": []
-        }
+    # 扫描 VAE
+    vae_models = []
+    if os.path.exists(vae_dir):
+        for file_name in sorted(os.listdir(vae_dir), key=lambda x: os.path.getmtime(os.path.join(vae_dir, x)),
+                                reverse=True):
+            if file_name.endswith(".ckpt"):
+                vae_models.append({
+                    "file_name": file_name,
+                    "full_path": os.path.join(vae_dir, file_name),
+                    "create_time": datetime.fromtimestamp(os.path.getmtime(os.path.join(vae_dir, file_name))).strftime(
+                        "%Y-%m-%d %H:%M:%S"),
+                })
+        print(f"[OK] 找到 {len(vae_models)} 个VAE模型")
+    else:
+        print(f"[警告] VAE目录不存在：{vae_dir}")
 
-    # ========================================================
-    # scan versions
-    # ========================================================
-    for version_name in os.listdir(model_root):
-
-        version_dir = os.path.join(
-            model_root,
-            version_name,
-        )
-
-        if not os.path.isdir(version_dir):
-            continue
-
-        # ====================================================
-        # ldm
-        # ====================================================
-        ldm_dir = os.path.join(
-            version_dir,
-            "ldm"
-        )
-
-        ldm_models = []
-
-        if os.path.exists(ldm_dir):
-
-            for file_name in os.listdir(ldm_dir):
-
-                if file_name.endswith(".ckpt"):
-                    ldm_models.append({
-
-                        "file_name": file_name,
-
-                        "full_path":
-                            os.path.join(
-                                ldm_dir,
-                                file_name
-                            ),
-                    })
-
-        # ====================================================
-        # vae
-        # ====================================================
-        vae_dir = os.path.join(
-            version_dir,
-            "vae"
-        )
-
-        vae_models = []
-
-        if os.path.exists(vae_dir):
-
-            for file_name in os.listdir(vae_dir):
-
-                if file_name.endswith(".ckpt"):
-                    vae_models.append({
-
-                        "file_name": file_name,
-
-                        "full_path":
-                            os.path.join(
-                                vae_dir,
-                                file_name
-                            ),
-                    })
-
-        # ====================================================
-        # append
-        # ====================================================
-        versions.append({
-
-            "version": version_name,
-
-            "create_time":
-                datetime.fromtimestamp(
-
-                    os.path.getmtime(
-                        version_dir
-                    )
-
-                ).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
-
-            "ldm_models": ldm_models,
-
-            "vae_models": vae_models,
-        })
-
-    # ========================================================
-    # sort
-    # ========================================================
-    versions = sorted(
-
-        versions,
-
-        key=lambda x: x["create_time"],
-
-        reverse=True,
-    )
+    # 扫描 LDM
+    ldm_models = []
+    if os.path.exists(ldm_dir):
+        for file_name in sorted(os.listdir(ldm_dir), key=lambda x: os.path.getmtime(os.path.join(ldm_dir, x)),
+                                reverse=True):
+            if file_name.endswith(".ckpt"):
+                ldm_models.append({
+                    "file_name": file_name,
+                    "full_path": os.path.join(ldm_dir, file_name),
+                    "create_time": datetime.fromtimestamp(os.path.getmtime(os.path.join(ldm_dir, file_name))).strftime(
+                        "%Y-%m-%d %H:%M:%S"),
+                })
+        print(f"[OK] 找到 {len(ldm_models)} 个LDM模型")
+    else:
+        print(f"[警告] LDM目录不存在：{ldm_dir}")
 
     return {
-        "versions": versions
+        "vae_models": vae_models,
+        "ldm_models": ldm_models,
+        "base_dir": BASE_DIR,
+        "mode": "frozen" if getattr(sys, 'frozen', False) else "dev",
     }
 
 

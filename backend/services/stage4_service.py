@@ -180,7 +180,10 @@ def run_stage4(
         porosity,
         tau_z,
         surface_area,
-        version=None,
+        vae_path,
+        ldm_path,
+        device,
+        num_samples,
         external_logger=None,
 ):
     """
@@ -197,6 +200,8 @@ def run_stage4(
     Returns
     -------
     dict
+    :param ldm_path:
+    :param vae_path:
     """
 
     # =========================================================
@@ -218,15 +223,15 @@ def run_stage4(
     log("开始执行按需生成闭环：generate -> coarse filter -> exact evaluate -> select")
     log("=" * 90)
 
-    ldm_ckpt_path = LDM_CKPT_PATH
-    vae_ckpt_path = VAE_CKPT_PATH
+    ldm_ckpt_path = ldm_path
+    vae_ckpt_path = vae_path
 
     log(f"LDM_CKPT_PATH : {ldm_ckpt_path}")
     log(f"VAE_CKPT_PATH : {vae_ckpt_path}")
     log(f"SUMMARY_JSON_PATH : {SUMMARY_JSON_PATH}")
     log(f"OUT_DIR : {OUT_DIR}")
-    log(f"DEVICE : {DEVICE}")
-    log(f"NUM_SAMPLES : {NUM_SAMPLES}")
+    log(f"DEVICE : {device}")
+    log(f"NUM_SAMPLES : {num_samples}")
 
     # =========================================================
     # target condition
@@ -257,7 +262,7 @@ def run_stage4(
     # device
     # =========================================================
     device = torch.device(
-        DEVICE if (DEVICE == "cpu" or torch.cuda.is_available()) else "cpu"
+        device if (device == "cpu" or torch.cuda.is_available()) else "cpu"
     )
 
     log(f"实际使用设备: {device}")
@@ -317,7 +322,7 @@ def run_stage4(
     cond_norm_all = (
         torch.from_numpy(cond_norm_np)
         .unsqueeze(0)
-        .repeat(NUM_SAMPLES, 1)
+        .repeat(num_samples, 1)
         .to(device)
     )
 
@@ -357,7 +362,7 @@ def run_stage4(
             range_report,
 
         "num_samples":
-            NUM_SAMPLES,
+            num_samples,
 
         "ldm_checkpoint":
             ldm_ckpt_path,
@@ -433,7 +438,7 @@ def run_stage4(
 
     log("开始生成与搜索 ...")
 
-    for i in range(NUM_SAMPLES):
+    for i in range(num_samples):
 
         candidate_id = f"sample_{i:03d}"
 
@@ -709,7 +714,7 @@ def run_stage4(
             run_dir,
 
         "num_samples":
-            NUM_SAMPLES,
+            num_samples,
 
         "primary_target_condition":
             target_condition,

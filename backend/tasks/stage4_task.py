@@ -33,7 +33,11 @@ def run_stage4_task(
             porosity=request_data.porosity,
             tau_z=request_data.tau_z,
             surface_area=request_data.surface_area,
-            version=request_data.version,
+            vae_path=request_data.vae_path,
+            ldm_path=request_data.ldm_path,
+            # 新增：设备和采样数
+            device=request_data.device,
+            num_samples=request_data.num_samples,
             external_logger=web_log,
         )
 

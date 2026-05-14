@@ -4,6 +4,11 @@ from PyInstaller.utils.hooks import collect_all
 from glob import glob
 import os
 import torch
+import sys
+
+# ===== 添加这部分 =====
+python_dll_path = os.path.join(sys.prefix, 'python311.dll')
+python_dlls = [(python_dll_path, '.')] if os.path.exists(python_dll_path) else []
 
 block_cipher = None
 torch_lib_path = os.path.join(
@@ -39,6 +44,7 @@ a = Analysis(
     pathex=[],
 
 binaries=[
+    *python_dlls,
     *torch_dlls,
 
     *torch_binaries,
@@ -55,6 +61,8 @@ binaries=[
         ('workspace', 'workspace'),
         ('latent_diffusion.py', '.'),
         ('vaemodule.py', '.'),
+        ('backend/electrode_twin/checkpoints', 'checkpoints'),
+        ('backend/electrode_twin/ldm_checkpoints', 'ldm_checkpoints'),
         *torch_datas,
         *fastapi_datas,
         *uvicorn_datas,

@@ -33,20 +33,20 @@ def query_task(task_id):
     return response.json()
 
 
-def get_model_versions():
-    try:
-
-        response = requests.get(
-            f"{API_BASE}/models/versions"
-        )
-
-        data = response.json()
-
-        return data.get("versions", [])
-
-    except:
-
-        return []
+# def get_model_versions():
+#     try:
+#
+#         response = requests.get(
+#             f"{API_BASE}/models/versions"
+#         )
+#
+#         data = response.json()
+#
+#         return data.get("versions", [])
+#
+#     except:
+#
+#         return []
 
 
 def query_all_tasks():

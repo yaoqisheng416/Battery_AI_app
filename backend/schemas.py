@@ -6,16 +6,19 @@ from typing import Optional
 # stage4 generate_structure_from_condition
 # =========================================================
 class Stage4Request(BaseModel):
+    task_id: Optional[str] = None
     #  ex: 0.2
     porosity: float
-
     #  ex: 7
     tau_z: float
-
     #    ex: 1150.0
     surface_area: float
-
-    version: Optional[str] = None
+    #  新增：模型路径（前端传递）
+    vae_path: Optional[str] = None
+    ldm_path: Optional[str] = None
+    # 新增：设备和采样数
+    device: str = "cuda"       # 默认 cuda
+    num_samples: int = 32      # 默认 32
 
 
 # =========================================================
