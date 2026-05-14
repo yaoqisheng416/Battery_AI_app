@@ -28,6 +28,14 @@ from pages.stage2_page import Stage2Page
 from pages.stage3_page import Stage3Page
 from pages.stage4_page import Stage4Page
 from pages.stage6_page import Stage6Page
+import sys
+import os
+
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
 
 
 class MainWindow(QMainWindow):

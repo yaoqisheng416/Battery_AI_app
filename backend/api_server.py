@@ -472,7 +472,9 @@ def start_server():
         host="127.0.0.1",
         port=8000,
         log_level="info",
-        reload=False
+        reload=False,
+        log_config=None,
+        access_log=False
     )
 
 
