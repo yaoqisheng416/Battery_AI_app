@@ -194,9 +194,9 @@ def create_stage6_task(
 def get_base_dir():
     """智能判断：打包后用exe目录，本地用脚本目录"""
     if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
+        return os.path.dirname(sys.executable)  # 打包后exe目录
     else:
-        return os.path.dirname(os.path.abspath(__file__))
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 本地模式: 从脚本位置向上找项目根目录
 
 
 @app.get("/models/versions")
@@ -210,8 +210,8 @@ def get_model_versions():
         print(f"[打包模式] VAE: {vae_dir}")
         print(f"[打包模式] LDM: {ldm_dir}")
     else:
-        vae_dir = os.path.join(BASE_DIR, "electrode_twin", "checkpoints")
-        ldm_dir = os.path.join(BASE_DIR, "electrode_twin", "ldm_checkpoints")
+        vae_dir = os.path.join(BASE_DIR, "checkpoints")
+        ldm_dir = os.path.join(BASE_DIR, "ldm_checkpoints")
         print(f"[本地模式] VAE: {vae_dir}")
         print(f"[本地模式] LDM: {ldm_dir}")
 

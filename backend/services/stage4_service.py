@@ -262,7 +262,7 @@ def run_stage4(
     # device
     # =========================================================
     device = torch.device(
-        device if (device == "cpu" or torch.cuda.is_available()) else "cpu"
+        "cuda" if torch.cuda.is_available() else "cpu"
     )
 
     log(f"实际使用设备: {device}")

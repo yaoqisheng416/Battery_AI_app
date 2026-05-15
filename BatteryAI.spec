@@ -6,20 +6,8 @@ import os
 import torch
 import sys
 
-# ===== 添加这部分 =====
-python_dll_path = os.path.join(sys.prefix, 'python311.dll')
-python_dlls = [(python_dll_path, '.')] if os.path.exists(python_dll_path) else []
 
 block_cipher = None
-torch_lib_path = os.path.join(
-    os.path.dirname(torch.__file__),
-    'lib'
-)
-
-torch_dlls = [
-    (dll, '.')
-    for dll in glob(os.path.join(torch_lib_path, '*.dll'))
-]
 
 # =========================================
 # 自动收集 torch / fastapi 等依赖
@@ -43,17 +31,14 @@ a = Analysis(
 
     pathex=[],
 
-binaries=[
-    *python_dlls,
-    *torch_dlls,
-
+    binaries=[
     *torch_binaries,
     *fastapi_binaries,
     *uvicorn_binaries,
     *lightning_binaries,
     *scipy_binaries,
     *skimage_binaries,
-],
+    ],
 
     datas=[
         ('backend', 'backend'),
@@ -61,8 +46,6 @@ binaries=[
         ('workspace', 'workspace'),
         ('latent_diffusion.py', '.'),
         ('vaemodule.py', '.'),
-        ('backend/electrode_twin/checkpoints', 'checkpoints'),
-        ('backend/electrode_twin/ldm_checkpoints', 'ldm_checkpoints'),
         *torch_datas,
         *fastapi_datas,
         *uvicorn_datas,
