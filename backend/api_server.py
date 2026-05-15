@@ -199,6 +199,14 @@ def get_base_dir():
         return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 本地模式: 从脚本位置向上找项目根目录
 
 
+@app.get("/health")
+def health(SERVER_READY=True):
+
+    return {
+        "ready": SERVER_READY
+    }
+
+
 @app.get("/models/versions")
 def get_model_versions():
     BASE_DIR = get_base_dir()
@@ -448,7 +456,7 @@ def start_server():
     uvicorn.run(
         app,
         host="127.0.0.1",
-        port=8000,
+        port=8001,
         log_level="info",
         reload=False,
         log_config=None,

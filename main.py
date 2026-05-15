@@ -5,7 +5,7 @@ import subprocess
 import sys
 import time
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
@@ -19,9 +19,11 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget, QPushButton, QScrollArea,
+    # 新增
+    QMessageBox,
+    QProgressBar,
 )
 
-from backend.api_server import start_server
 from pages.history_page import HistoryPage
 from pages.stage1_page import Stage1Page
 from pages.stage2_page import Stage2Page
@@ -585,45 +587,157 @@ class MainWindow(QMainWindow):
             """)
 
 
+# ============================================
+# 单实例锁
+# 防止重复启动
+# ============================================
+
+LOCK_PORT = 54321
+
+
+def already_running():
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    try:
+        s.bind(("127.0.0.1", LOCK_PORT))
+        return False
+
+    except socket.error:
+        return True
+
+
+# ============================================
+# 启动 Splash
+# ============================================
+
+class SplashScreen(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.setWindowTitle("Battery AI")
+
+        self.setFixedSize(420, 220)
+
+        self.setWindowFlags(
+            Qt.WindowStaysOnTopHint |
+            Qt.CustomizeWindowHint
+        )
+
+        layout = QVBoxLayout()
+
+        self.label = QLabel("正在启动 三维数字孪生应用...")
+
+        self.label.setAlignment(Qt.AlignCenter)
+
+        self.label.setStyleSheet("""
+            font-size: 18px;
+            font-weight: bold;
+        """)
+
+        self.progress = QProgressBar()
+
+        self.progress.setRange(0, 100)
+
+        self.progress.setValue(0)
+
+        layout.addStretch()
+
+        layout.addWidget(self.label)
+
+        layout.addWidget(self.progress)
+
+        layout.addStretch()
+
+        self.setLayout(layout)
+
+        self.timer = QTimer()
+
+        self.timer.timeout.connect(self.fake_progress)
+
+        self.current = 0
+
+        self.timer.start(120)
+
+    def fake_progress(self):
+
+        if self.current < 90:
+
+            self.current += 1
+
+            self.progress.setValue(self.current)
+
+    def finish(self):
+
+        self.timer.stop()
+
+        self.progress.setValue(100)
+
+        self.label.setText("启动完成")
+
+
 def run_api_server():
-    """在子进程中运行后端 API"""
+
+    from backend.api_server import start_server
+
     start_server()
 
 
-def wait_for_api(host="127.0.0.1", port=8000, timeout=15):
+def wait_for_api(timeout=120):
 
-    print(f"正在检测后端 API（{host}:{port}）...")
+    import requests
 
     start_time = time.time()
 
     while time.time() - start_time < timeout:
 
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1)
 
-            result = sock.connect_ex((host, port))
+            r = requests.get(
+                "http://127.0.0.1:8001/health",
+                timeout=2
+            )
 
-            sock.close()
+            if r.status_code == 200:
 
-            if result == 0:
-                print(f"后端 API 已启动（端口 {port}）")
-                return True
+                data = r.json()
 
-        except:
-            pass
+                if data.get("ready") is True:
 
-        time.sleep(0.5)
+                    print("[OK] API 已完全启动")
+
+                    return True
+
+                else:
+
+                    print("API 正在初始化模型...")
+
+        except Exception as e:
+
+            print("等待 API:", e)
+
+        time.sleep(1)
 
     return False
 
 
 if __name__ == "__main__":
 
-    # =====================================
-    # PyInstaller 多进程必须
-    # =====================================
     multiprocessing.freeze_support()
+
+    if already_running():
+
+        app = QApplication(sys.argv)
+
+        QMessageBox.warning(
+            None,
+            "提示",
+            "BatteryAI 已经在运行中"
+        )
+
+        sys.exit(0)
 
     print("=" * 50)
     print("开始启动应用...")
@@ -631,10 +745,16 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
+    splash = SplashScreen()
+
+    splash.show()
+
+    app.processEvents()
+
     # =====================================
     # 启动 API
     # =====================================
-    print("[1] 启动后端 API...")
+    splash.label.setText("正在启动后端 API...")
 
     api_process = multiprocessing.Process(
         target=run_api_server,
@@ -643,33 +763,40 @@ if __name__ == "__main__":
 
     api_process.start()
 
-    print(f"API PID: {api_process.pid}")
-
     # =====================================
-    # 等待 API
+    # 等待 API 完全初始化
     # =====================================
-    print("[2] 等待 API 启动...")
+    splash.label.setText("正在加载 AI 模型（请稍等）...")
 
-    if not wait_for_api():
+    print("[2] 等待 API 完全初始化...")
 
-        print("API 启动失败")
+    if not wait_for_api(timeout=300):  # 建议加大
+
+        QMessageBox.critical(
+            None,
+            "错误",
+            "后端 API 初始化失败"
+        )
 
         api_process.terminate()
-
         sys.exit(1)
 
-    # =====================================
-    # 启动 GUI
-    # =====================================
-    print("[3] 启动 GUI...")
+    # API完全ready后才到这里
+    splash.label.setText("启动界面...")
+
+    splash.repaint()
+    app.processEvents()
 
     window = MainWindow()
 
     window.show()
 
+    splash.close()
+
     # =====================================
     # 清理
     # =====================================
+
     def cleanup():
 
         if api_process.is_alive():
