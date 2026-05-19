@@ -29,7 +29,7 @@ class largeVolumeGenerateRequest(BaseModel):
     task_id: str | None = None
 
     local_conditions_json: str
-    summary_json_path: str
+    summary_json_path: str | None = None
     ldm_ckpt_path: str
     vae_ckpt_path: str
     out_dir: str

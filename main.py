@@ -29,6 +29,7 @@ from pages.stage1_page import Stage1Page
 from pages.stage2_page import Stage2Page
 from pages.stage3_page import Stage3Page
 from pages.stage4_page import Stage4Page
+from pages.stage5_page import Stage5Page
 from pages.stage6_page import Stage6Page
 import sys
 import os
@@ -145,6 +146,7 @@ class MainWindow(QMainWindow):
             "Stage2 模型训练",
             "Stage3 模型训练",
             "Stage4 条件可控的两相结构生成",
+            "Stage5 任意大体积组装生成与验证",
             "Stage6 CBD三相电极结构生成与参数拟合",
             "任务中心",
         ]
@@ -159,6 +161,7 @@ class MainWindow(QMainWindow):
         self.stage2_page = Stage2Page()
         self.stage3_page = Stage3Page()
         self.stage4_page = Stage4Page(self)
+        self.stage5_page = Stage5Page(self)
         self.stage6_page = Stage6Page(self)
         self.history_page = HistoryPage()
 
@@ -166,6 +169,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.stage2_page)
         self.stack.addWidget(self.stage3_page)
         self.stack.addWidget(self.stage4_page)
+        self.stack.addWidget(self.stage5_page)
         self.stack.addWidget(self.stage6_page)
         self.stack.addWidget(self.history_page)
 
