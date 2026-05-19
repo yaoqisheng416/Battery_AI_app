@@ -41,6 +41,10 @@ class Stage5Page(QWidget):
         self.selected_vae_path = None
         self.selected_ldm_path = None
 
+        self.default_summary_json = resource_path(
+            "backend/electrode_twin/latent_dataset/dataset_summary.json"
+        )
+
         self.init_ui()
 
         self.load_models()
@@ -380,8 +384,11 @@ class Stage5Page(QWidget):
         # =====================================================
         # btn
         # =====================================================
+
+        btn_layout = QHBoxLayout()
+
         btn = QPushButton(
-            "执行Stage5-1：构建空间异质局部条件场"
+            "开始执行Stage5-1：构建空间异质局部条件场"
         )
 
         btn.setMinimumHeight(45)
@@ -403,9 +410,36 @@ class Stage5Page(QWidget):
             self.start_local_condition_task
         )
 
-        layout.addWidget(btn)
+        # ============================================
+        # reset
+        # ============================================
 
-        layout.addStretch()
+        btn_reset = QPushButton("恢复默认参数")
+
+        btn_reset.setMinimumHeight(45)
+
+        btn_reset.setStyleSheet("""
+            QPushButton{
+                background:#666;
+                color:white;
+                border-radius:8px;
+                font-size:15px;
+                font-weight:bold;
+            }
+
+            QPushButton:hover{
+                background:#888;
+            }
+        """)
+
+        btn_reset.clicked.connect(
+            self.reset_local_condition_params
+        )
+
+        btn_layout.addWidget(btn)
+        btn_layout.addWidget(btn_reset)
+
+        layout.addLayout(btn_layout)
 
     # =========================================================
     # tab2
@@ -649,11 +683,10 @@ class Stage5Page(QWidget):
 
         layout.addWidget(param_group)
 
-        # =====================================================
-        # btn
-        # =====================================================
+        btn_layout = QHBoxLayout()
+
         btn = QPushButton(
-            "执行Stage5-2：生成224³大体积"
+            "开始执行Stage5-2：生成224³大体积"
         )
 
         btn.setMinimumHeight(45)
@@ -666,6 +699,7 @@ class Stage5Page(QWidget):
                 font-size:15px;
                 font-weight:bold;
             }
+
             QPushButton:hover{
                 background:#6aa1ff;
             }
@@ -675,9 +709,36 @@ class Stage5Page(QWidget):
             self.start_large_volume_task
         )
 
-        layout.addWidget(btn)
+        # ============================================
+        # reset
+        # ============================================
 
-        layout.addStretch()
+        btn_reset = QPushButton("恢复默认参数")
+
+        btn_reset.setMinimumHeight(45)
+
+        btn_reset.setStyleSheet("""
+            QPushButton{
+                background:#666;
+                color:white;
+                border-radius:8px;
+                font-size:15px;
+                font-weight:bold;
+            }
+
+            QPushButton:hover{
+                background:#888;
+            }
+        """)
+
+        btn_reset.clicked.connect(
+            self.reset_large_volume_params
+        )
+
+        btn_layout.addWidget(btn)
+        btn_layout.addWidget(btn_reset)
+
+        layout.addLayout(btn_layout)
 
     # =========================================================
     # model api
@@ -835,6 +896,27 @@ class Stage5Page(QWidget):
     # start task1
     # =========================================================
     def start_local_condition_task(self):
+        # ============================================
+        # check
+        # ============================================
+
+        if not self.real_volume_edit.text().strip():
+            QMessageBox.warning(
+                self,
+                "错误",
+                "请选择真实体积文件"
+            )
+
+            return
+
+        if not self.out_dir1_edit.text().strip():
+            QMessageBox.warning(
+                self,
+                "错误",
+                "请选择输出目录"
+            )
+
+            return
 
         payload = {
 
@@ -895,16 +977,74 @@ class Stage5Page(QWidget):
             payload
         )
 
-        QMessageBox.information(
-            self,
-            "提示",
-            f"任务已提交\n{result}"
+        # 提交成功弹窗
+        msg = QMessageBox(self)
+
+        msg.setWindowTitle("任务已提交")
+
+        msg.setText(
+            f"Stage5-1 任务已提交\n{result}！"
         )
+
+        msg.setInformativeText(
+            "任务正在后台运行，请前往「历史任务中心」查看进度和结果。"
+        )
+
+        msg.setStandardButtons(
+            QMessageBox.Ok | QMessageBox.Cancel
+        )
+
+        msg.setDefaultButton(
+            QMessageBox.Ok
+        )
+        # 添加按钮
+        go_btn = msg.addButton(
+            "前往任务中心",
+            QMessageBox.ActionRole
+        )
+        ret = msg.exec_()
+        # 跳转任务中心
+        if (
+                ret == QMessageBox.Ok
+                or msg.clickedButton() == go_btn
+        ):
+            self.main_window.menu.setCurrentRow(6)
 
     # =========================================================
     # start task2
     # =========================================================
     def start_large_volume_task(self):
+
+        # ============================================
+        # check
+        # ============================================
+
+        if not self.local_json_edit.text().strip():
+            QMessageBox.warning(
+                self,
+                "错误",
+                "请选择local_conditions_json"
+            )
+
+            return
+
+        if not self.summary_json_edit.text().strip():
+            QMessageBox.warning(
+                self,
+                "错误",
+                "请选择summary_json"
+            )
+
+            return
+
+        if not self.out_dir2_edit.text().strip():
+            QMessageBox.warning(
+                self,
+                "错误",
+                "请选择输出目录"
+            )
+
+            return
 
         payload = {
 
@@ -962,8 +1102,129 @@ class Stage5Page(QWidget):
             payload
         )
 
+        # 提交成功弹窗
+        msg = QMessageBox(self)
+
+        msg.setWindowTitle("任务已提交")
+
+        msg.setText(
+            f"Stage5-1 任务已提交\n{result}！"
+        )
+
+        msg.setInformativeText(
+            "任务正在后台运行，请前往「历史任务中心」查看进度和结果。"
+        )
+
+        msg.setStandardButtons(
+            QMessageBox.Ok | QMessageBox.Cancel
+        )
+
+        msg.setDefaultButton(
+            QMessageBox.Ok
+        )
+        # 添加按钮
+        go_btn = msg.addButton(
+            "前往任务中心",
+            QMessageBox.ActionRole
+        )
+        ret = msg.exec_()
+        # 跳转任务中心
+        if (
+                ret == QMessageBox.Ok
+                or msg.clickedButton() == go_btn
+        ):
+            self.main_window.menu.setCurrentRow(6)
+
+    def reset_local_condition_params(self):
+
+        # file
+        self.real_volume_edit.clear()
+        self.out_dir1_edit.clear()
+
+        # crop
+        self.crop_y_spin.setValue(0)
+        self.crop_z_spin.setValue(100)
+        self.crop_x_spin.setValue(0)
+
+        # volume
+        self.large_vol_spin.setValue(224)
+
+        # patch
+        self.patch_size1_spin.setValue(128)
+        self.overlap1_spin.setValue(32)
+
+        # phase
+        self.pore1_spin.setValue(0)
+        self.solid1_spin.setValue(1)
+
+        # voxel
+        self.voxel_y1_spin.setValue(0.0315)
+        self.voxel_z1_spin.setValue(0.02791)
+        self.voxel_x1_spin.setValue(0.02791)
+
+        # clean
+        self.remove_small_checkbox.setChecked(True)
+
+        self.min_pore_spin.setValue(10)
+
+        # tau
+        self.tau_nonperc_spin.setValue(1e6)
+
+        self.suppress_checkbox.setChecked(True)
+
         QMessageBox.information(
             self,
             "提示",
-            f"任务已提交\n{result}"
+            "Stage5-1 参数已恢复默认"
+        )
+
+    def reset_large_volume_params(self):
+
+        # file
+        self.local_json_edit.clear()
+
+        self.summary_json_edit.setText(
+            self.default_summary_json
+        )
+
+        self.out_dir2_edit.clear()
+
+        # model
+        if self.vae_combo.count() > 0:
+            self.vae_combo.setCurrentIndex(0)
+
+        if self.ldm_combo.count() > 0:
+            self.ldm_combo.setCurrentIndex(0)
+
+        # device
+        self.device_combo.setCurrentText("cuda")
+
+        # patch
+        self.patch_size2_spin.setValue(128)
+        self.overlap2_spin.setValue(32)
+
+        # sample
+        self.num_samples_spin.setValue(64)
+
+        # threshold
+        self.adaptive_checkbox.setChecked(True)
+
+        self.threshold_iter_spin.setValue(25)
+
+        self.threshold_tol_spin.setValue(1e-4)
+
+        # topology
+        self.topology_spin.setValue(1.0)
+
+        self.topk_spin.setValue(3)
+
+        # flags
+        self.warn_checkbox.setChecked(True)
+
+        self.clip_checkbox.setChecked(False)
+
+        QMessageBox.information(
+            self,
+            "提示",
+            "Stage5-2 参数已恢复默认"
         )
