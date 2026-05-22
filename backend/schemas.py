@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Tuple, List, Dict, Any, Optional
 
 
 # =========================================================
@@ -71,13 +71,116 @@ class largeVolumeGenerateRequest(BaseModel):
     suppress_taufactor_output: bool | None = None
 
 
+class GenerateSpecificVolumeRequest(BaseModel):
+    # =========================
+    # task
+    # =========================
+    task_id: Optional[str] = None
+
+    # =========================
+    # paths
+    # =========================
+    summary_json_path: str
+    train_metrics_table_path: str
+    ldm_ckpt_path: str
+    vae_ckpt_path: str
+    out_dir: str
+
+    # =========================
+    # device
+    # =========================
+    device: Optional[str] = None
+
+    # =========================
+    # patch
+    # =========================
+    patch_size: Optional[int] = None
+    overlap: Optional[int] = None
+    grid_shape: Optional[Tuple[int, int, int]] = None
+
+    # =========================
+    # condition
+    # =========================
+    condition_input_mode: Optional[str] = None
+    target_patch_porosity: Optional[float] = None
+    target_patch_tau_z: Optional[float] = None
+
+    manual_patch_conditions: Optional[List[Dict[str, Any]]] = None
+
+    # =========================
+    # auto completion
+    # =========================
+    auto_surface_mode: Optional[str] = None
+    auto_deff_mode: Optional[str] = None
+
+    # =========================
+    # generation
+    # =========================
+    num_samples_per_patch: Optional[int] = None
+    pore_value: Optional[int] = None
+    solid_value: Optional[int] = None
+
+    # =========================
+    # voxel
+    # =========================
+    voxel_size_y: Optional[float] = None
+    voxel_size_z: Optional[float] = None
+    voxel_size_x: Optional[float] = None
+
+    # =========================
+    # cleaning
+    # =========================
+    remove_small_pore_components: Optional[bool] = None
+    min_pore_component_size: Optional[int] = None
+
+    # =========================
+    # postprocess
+    # =========================
+    postprocess_configs: Optional[List[Dict[str, Any]]] = None
+
+    # =========================
+    # threshold
+    # =========================
+    use_adaptive_threshold_for_porosity: Optional[bool] = None
+    adaptive_threshold_max_iters: Optional[int] = None
+    adaptive_threshold_tol: Optional[float] = None
+    threshold_offsets: Optional[List[float]] = None
+
+    # =========================
+    # scoring
+    # =========================
+    cheap_error_weights: Optional[Dict[str, float]] = None
+    final_error_weights: Optional[Dict[str, float]] = None
+    use_std_normalized_error: Optional[bool] = None
+
+    topology_penalty_weight: Optional[float] = None
+    min_solid_component_count_soft: Optional[int] = None
+    exact_eval_topk_per_candidate: Optional[int] = None
+
+    # =========================
+    # OOD
+    # =========================
+    warn_if_target_ood: Optional[bool] = None
+    clip_normalized_condition_to_train_range: Optional[bool] = None
+
+    # =========================
+    # tau
+    # =========================
+    tau_nonperc_value: Optional[float] = None
+    suppress_taufactor_output: Optional[bool] = None
+
+    # =========================
+    # slice
+    # =========================
+    save_all_y_zx_slice_png: Optional[bool] = None
+    slice_color_style: Optional[str] = None
+    slice_show_axis: Optional[bool] = None
+    slice_dpi: Optional[int] = None
+
+
 # =========================================================
 # stage5 build_large_volume_conditions_from_real
 # =========================================================
-from pydantic import BaseModel
-from typing import Optional
-
-
 class localConditionsGenerateRequest(BaseModel):
 
     task_id: Optional[str] = None
@@ -123,7 +226,6 @@ class cbdGenerateRequest(BaseModel):
     # ex: electrode_twin/generated_results/run_007
     task_id: Optional[str] = None
     input_volume_path: str
-
 
     # ex: 0.05
     target_cbd_vol_frac: float

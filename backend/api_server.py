@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, FileResponse
 
 from backend.schemas import Stage4Request, cbdGenerateRequest, fitParameterRequest, largeVolumeGenerateRequest, \
-    localConditionsGenerateRequest
+    localConditionsGenerateRequest, GenerateSpecificVolumeRequest
 
 from backend.core.task_manager import (
     create_task,
@@ -22,10 +22,11 @@ from backend.core.task_manager import (
 )
 
 from backend.tasks.stage4_task import run_stage4_task
-from backend.tasks.stage5_task import run_large_volume_generate_task, run_local_conditions_generate_task
+from backend.tasks.stage5_task import run_large_volume_generate_task, run_local_conditions_generate_task, \
+    run_generate_specific_volume_task
 from backend.tasks.stage6_task import run_stage6_cbd_fit_task, run_stage6_cbd_generate_task
 
-logger = logging.getLogger("cbd_w_fitting_service")
+logger = logging.getLogger("api_server")
 
 if not logger.handlers:
     handler = logging.StreamHandler()
@@ -131,7 +132,6 @@ def query_task(task_id: str):
 def create_stage5_task(
         request: localConditionsGenerateRequest
 ):
-
     # ============================================
     # task_id
     # ============================================
@@ -201,6 +201,31 @@ def create_stage5_task(
     # ============================================
     # response
     # ============================================
+    return {
+        "task_id": task_id,
+        "status": "queued",
+    }
+
+
+# ============================================================
+# Create Stage5 GenerateSpecificVolume Task API 新stage5
+# ============================================================
+@app.post("/stage5/generate-specific-volume")
+def create_stage5_task(request: GenerateSpecificVolumeRequest):
+
+    if request.task_id:
+        task_id = request.task_id
+    else:
+        task_id = create_task("Stage5 生成特定体积")
+
+    thread = threading.Thread(
+        target=run_generate_specific_volume_task,
+        args=(task_id, request),
+        daemon=True,
+    )
+
+    thread.start()
+
     return {
         "task_id": task_id,
         "status": "queued",

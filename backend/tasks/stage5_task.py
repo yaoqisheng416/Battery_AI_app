@@ -2,8 +2,11 @@
 import traceback
 
 from backend.core.task_manager import update_progress, append_log, set_finished, set_failed, set_running
+from backend.schemas import GenerateSpecificVolumeRequest
 from backend.services.stage5_build_real_large_volume_service import generate_local_conditions_service
 from backend.services.stage5_generate_large_volume_224_service import generate_large_volume_service
+from backend.services.stage5_generate_specific_volume_service import generate_specific_volume_service
+from config import GenerateSpecificVolumeConfig
 
 
 # ============================================
@@ -388,3 +391,110 @@ def run_large_volume_generate_task(
             task_id,
             traceback.format_exc()
         )
+
+
+def merge_request_to_config(
+    request: GenerateSpecificVolumeRequest,
+) -> GenerateSpecificVolumeConfig:
+
+    def pick(req_value, cfg_value):
+        return cfg_value if req_value is None else req_value
+
+    return GenerateSpecificVolumeConfig(
+
+        # paths（必须传）
+        summary_json_path=request.summary_json_path,
+        train_metrics_table_path=request.train_metrics_table_path,
+        ldm_ckpt_path=request.ldm_ckpt_path,
+        vae_ckpt_path=request.vae_ckpt_path,
+        out_dir=request.out_dir,
+
+        # device
+        device=pick(request.device, "cuda"),
+
+        # patch
+        patch_size=pick(request.patch_size, 128),
+        overlap=pick(request.overlap, 32),
+        grid_shape=pick(request.grid_shape, (2, 2, 2)),
+
+        # condition
+        condition_input_mode=pick(request.condition_input_mode, "uniform_porosity"),
+        target_patch_porosity=pick(request.target_patch_porosity, 0.30),
+        target_patch_tau_z=pick(request.target_patch_tau_z, 3.30),
+        manual_patch_conditions=pick(request.manual_patch_conditions, []),
+
+        # auto
+        auto_surface_mode=pick(request.auto_surface_mode, "nearest_training_porosity_tau"),
+        auto_deff_mode=pick(request.auto_deff_mode, "porosity_over_tau"),
+
+        # generation
+        num_samples_per_patch=pick(request.num_samples_per_patch, 32),
+        pore_value=pick(request.pore_value, 0),
+        solid_value=pick(request.solid_value, 1),
+
+        # voxel
+        voxel_size_y=pick(request.voxel_size_y, 0.0315),
+        voxel_size_z=pick(request.voxel_size_z, 0.02791),
+        voxel_size_x=pick(request.voxel_size_x, 0.02791),
+
+        # cleaning
+        remove_small_pore_components=pick(request.remove_small_pore_components, True),
+        min_pore_component_size=pick(request.min_pore_component_size, 10),
+
+        # postprocess
+        postprocess_configs=pick(request.postprocess_configs, None),
+
+        # threshold
+        use_adaptive_threshold_for_porosity=pick(request.use_adaptive_threshold_for_porosity, True),
+        adaptive_threshold_max_iters=pick(request.adaptive_threshold_max_iters, 25),
+        adaptive_threshold_tol=pick(request.adaptive_threshold_tol, 1e-4),
+        threshold_offsets=pick(request.threshold_offsets, None),
+
+        # scoring
+        cheap_error_weights=pick(request.cheap_error_weights, None),
+        final_error_weights=pick(request.final_error_weights, None),
+        use_std_normalized_error=pick(request.use_std_normalized_error, True),
+
+        topology_penalty_weight=pick(request.topology_penalty_weight, 1.0),
+        min_solid_component_count_soft=pick(request.min_solid_component_count_soft, 10),
+        exact_eval_topk_per_candidate=pick(request.exact_eval_topk_per_candidate, 3),
+
+        # OOD
+        warn_if_target_ood=pick(request.warn_if_target_ood, True),
+        clip_normalized_condition_to_train_range=pick(request.clip_normalized_condition_to_train_range, False),
+
+        # tau
+        tau_nonperc_value=pick(request.tau_nonperc_value, 1e6),
+        suppress_taufactor_output=pick(request.suppress_taufactor_output, True),
+
+        # slice
+        save_all_y_zx_slice_png=pick(request.save_all_y_zx_slice_png, True),
+        slice_color_style=pick(request.slice_color_style, "black_yellow"),
+        slice_show_axis=pick(request.slice_show_axis, False),
+        slice_dpi=pick(request.slice_dpi, 200),
+    )
+
+
+def run_generate_specific_volume_task(task_id, request):
+
+    try:
+        set_running(task_id)
+
+        def web_log(msg):
+            append_log(task_id, str(msg))
+
+        # ===== merge request -> config =====
+        config = merge_request_to_config(request)
+
+        result = generate_specific_volume_service(
+            config=config,
+            task_id=task_id,
+            external_logger=web_log,
+        )
+
+        set_finished(task_id, result)
+
+    except Exception as e:
+        traceback.print_exc()
+        append_log(task_id, str(e))
+        set_failed(task_id, traceback.format_exc())

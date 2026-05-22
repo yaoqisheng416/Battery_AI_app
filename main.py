@@ -146,7 +146,7 @@ class MainWindow(QMainWindow):
             "Stage2 模型训练",
             "Stage3 模型训练",
             "Stage4 条件可控的两相结构生成",
-            "Stage5 任意大体积组装生成与验证",
+            "Stage5 生成特定体积",
             "Stage6 CBD三相电极结构生成与参数拟合",
             "任务中心",
         ]

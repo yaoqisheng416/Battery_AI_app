@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
+import json
 import os
 import sys
 
 import requests
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -11,13 +13,20 @@ from PySide6.QtWidgets import (
     QPushButton,
     QMessageBox,
     QComboBox,
-    QDoubleSpinBox, QFileDialog, QGroupBox, QLineEdit, QSpinBox, QCheckBox,
-    QTabWidget,
+    QDoubleSpinBox,
+    QFileDialog,
+    QGroupBox,
+    QLineEdit,
+    QSpinBox,
+    QCheckBox,
+    QTextEdit,
+    QScrollArea,
+    QGridLayout,
 )
 
 from api_client import (
     create_task,
-     API_BASE,
+    API_BASE,
 )
 
 
@@ -41,8 +50,14 @@ class Stage5Page(QWidget):
         self.selected_vae_path = None
         self.selected_ldm_path = None
 
+        self.manual_patch_widgets = []
+
         self.default_summary_json = resource_path(
             "backend/electrode_twin/latent_dataset/dataset_summary.json"
+        )
+
+        self.default_metrics_csv = resource_path(
+            "backend/electrode_twin/latent_dataset/train_metrics_table.csv"
         )
 
         self.init_ui()
@@ -60,7 +75,7 @@ class Stage5Page(QWidget):
         # title
         # =====================================================
         title = QLabel(
-            "Stage5 大体积结构生成"
+            "Stage5 生成特定体积"
         )
 
         title.setStyleSheet("""
@@ -73,63 +88,136 @@ class Stage5Page(QWidget):
         root_layout.addWidget(title)
 
         # =====================================================
-        # tabs
+        # scroll
         # =====================================================
-        self.tabs = QTabWidget()
+        scroll = QScrollArea()
 
-        self.tabs.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #444;
-                background: #2b2d31;
-                border-radius: 8px;
-            }
+        scroll.setWidgetResizable(True)
 
-            QTabBar::tab {
-                background: #25262b;
-                color: white;
-                padding: 12px 24px;
-                font-size: 14px;
-                font-weight: bold;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
-                margin-right: 5px;
-            }
+        root_layout.addWidget(scroll)
 
-            QTabBar::tab:selected {
-                background: #4f8cff;
-                color: white;
-            }
+        container = QWidget()
 
-            QTabBar::tab:hover {
-                background: #3a3b3f;
+        scroll.setWidget(container)
+
+        layout = QVBoxLayout(container)
+
+        # =====================================================
+        # tip
+        # =====================================================
+        tip = QLabel(
+            "根据用户指定 porosity / tau_z 条件，自动生成 224³ AM-pore twin volume"
+        )
+
+        tip.setWordWrap(True)
+
+        tip.setStyleSheet("""
+            QLabel{
+                background:#25262b;
+                border:1px solid #4f8cff;
+                border-radius:8px;
+                padding:12px;
+                color:#4f8cff;
+                font-size:12px;
             }
         """)
 
-        root_layout.addWidget(self.tabs)
+        layout.addWidget(tip)
 
         # =====================================================
-        # tab1
+        # model
         # =====================================================
-        self.tab_local_condition = QWidget()
+        self.build_model_group(layout)
 
-        self.tabs.addTab(
-            self.tab_local_condition,
-            "步骤1：构建 Local Conditions"
+        # =====================================================
+        # path
+        # =====================================================
+        self.build_path_group(layout)
+
+        # =====================================================
+        # condition
+        # =====================================================
+        self.build_condition_group(layout)
+
+        # =====================================================
+        # generation
+        # =====================================================
+        self.build_generation_group(layout)
+
+        # =====================================================
+        # threshold
+        # =====================================================
+        self.build_threshold_group(layout)
+
+        # =====================================================
+        # score
+        # =====================================================
+        self.build_score_group(layout)
+
+        # =====================================================
+        # slice
+        # =====================================================
+        self.build_slice_group(layout)
+
+        # =====================================================
+        # btn
+        # =====================================================
+        btn_layout = QHBoxLayout()
+
+        btn_run = QPushButton(
+            "开始执行 Stage5 生成特定体积"
         )
 
-        self.build_local_condition_tab()
+        btn_run.setMinimumHeight(50)
 
-        # =====================================================
-        # tab2
-        # =====================================================
-        self.tab_large_volume = QWidget()
+        btn_run.setStyleSheet("""
+            QPushButton{
+                background:#4f8cff;
+                color:white;
+                border-radius:8px;
+                font-size:16px;
+                font-weight:bold;
+            }
 
-        self.tabs.addTab(
-            self.tab_large_volume,
-            "步骤2：生成224³大体积"
+            QPushButton:hover{
+                background:#6aa1ff;
+            }
+        """)
+
+        btn_run.clicked.connect(
+            self.start_task
         )
 
-        self.build_large_volume_tab()
+        btn_reset = QPushButton(
+            "恢复默认参数"
+        )
+
+        btn_reset.setMinimumHeight(50)
+
+        btn_reset.setStyleSheet("""
+            QPushButton{
+                background:#666;
+                color:white;
+                border-radius:8px;
+                font-size:16px;
+                font-weight:bold;
+            }
+
+            QPushButton:hover{
+                background:#888;
+            }
+        """)
+
+        btn_reset.clicked.connect(
+            self.reset_params
+        )
+
+        btn_layout.addWidget(btn_run)
+        btn_layout.addWidget(btn_reset)
+
+        layout.addLayout(btn_layout)
+
+        layout.addStretch()
 
     # =========================================================
     # helper
@@ -139,11 +227,13 @@ class Stage5Page(QWidget):
             label_text,
             widget,
             layout,
-            label_width=220,
+            label_width=260,
     ):
+
         row = QHBoxLayout()
 
         label = QLabel(label_text)
+
         label.setFixedWidth(label_width)
 
         row.addWidget(label)
@@ -154,335 +244,20 @@ class Stage5Page(QWidget):
         layout.addLayout(row)
 
     # =========================================================
-    # tab1
+    # model
     # =========================================================
-    def build_local_condition_tab(self):
+    def build_model_group(self, layout):
 
-        layout = QVBoxLayout(self.tab_local_condition)
+        group = QGroupBox("模型选择")
 
-        # =====================================================
-        # tip
-        # =====================================================
-        tip = QLabel(
-            "从真实大体积中裁剪224³区域，并生成8个local conditions"
-        )
-
-        tip.setWordWrap(True)
-
-        tip.setStyleSheet("""
-            QLabel{
-                background:#25262b;
-                border:1px solid #4f8cff;
-                border-radius:8px;
-                padding:12px;
-                color:#4f8cff;
-                font-size:12px;
-            }
-        """)
-
-        layout.addWidget(tip)
-
-        # =====================================================
-        # file
-        # =====================================================
-        file_group = QGroupBox("文件路径")
-
-        file_layout = QVBoxLayout(file_group)
-
-        self.real_volume_edit = QLineEdit()
-        self.real_volume_edit.setPlaceholderText(
-            "真实体积npy路径"
-        )
-
-        self.out_dir1_edit = QLineEdit()
-        self.out_dir1_edit.setPlaceholderText(
-            "输出目录"
-        )
-
-        btn_real = QPushButton("选择真实体积")
-        btn_real.clicked.connect(
-            self.select_real_volume
-        )
-
-        btn_out1 = QPushButton("选择输出目录")
-        btn_out1.clicked.connect(
-            self.select_out_dir1
-        )
-
-        row1 = QHBoxLayout()
-        row1.addWidget(QLabel("真实体积"))
-        row1.addWidget(self.real_volume_edit)
-        row1.addWidget(btn_real)
-
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("输出目录"))
-        row2.addWidget(self.out_dir1_edit)
-        row2.addWidget(btn_out1)
-
-        file_layout.addLayout(row1)
-        file_layout.addLayout(row2)
-
-        layout.addWidget(file_group)
-
-        # =====================================================
-        # params
-        # =====================================================
-        param_group = QGroupBox("参数设置")
-
-        param_layout = QVBoxLayout(param_group)
-
-        # crop
-        self.crop_y_spin = QSpinBox()
-        self.crop_y_spin.setRange(0, 99999)
-        self.crop_y_spin.setValue(0)
-
-        self.crop_z_spin = QSpinBox()
-        self.crop_z_spin.setRange(0, 99999)
-        self.crop_z_spin.setValue(100)
-
-        self.crop_x_spin = QSpinBox()
-        self.crop_x_spin.setRange(0, 99999)
-        self.crop_x_spin.setValue(0)
-
-        self.large_vol_spin = QSpinBox()
-        self.large_vol_spin.setRange(32, 2048)
-        self.large_vol_spin.setValue(224)
-
-        self.patch_size1_spin = QSpinBox()
-        self.patch_size1_spin.setRange(32, 512)
-        self.patch_size1_spin.setValue(128)
-
-        self.overlap1_spin = QSpinBox()
-        self.overlap1_spin.setRange(0, 256)
-        self.overlap1_spin.setValue(32)
-
-        self.pore1_spin = QSpinBox()
-        self.pore1_spin.setValue(0)
-
-        self.solid1_spin = QSpinBox()
-        self.solid1_spin.setValue(1)
-
-        self.voxel_y1_spin = QDoubleSpinBox()
-        self.voxel_y1_spin.setDecimals(6)
-        self.voxel_y1_spin.setValue(0.0315)
-
-        self.voxel_z1_spin = QDoubleSpinBox()
-        self.voxel_z1_spin.setDecimals(6)
-        self.voxel_z1_spin.setValue(0.02791)
-
-        self.voxel_x1_spin = QDoubleSpinBox()
-        self.voxel_x1_spin.setDecimals(6)
-        self.voxel_x1_spin.setValue(0.02791)
-
-        self.remove_small_checkbox = QCheckBox()
-        self.remove_small_checkbox.setChecked(True)
-
-        self.min_pore_spin = QSpinBox()
-        self.min_pore_spin.setRange(1, 100000)
-        self.min_pore_spin.setValue(10)
-
-        self.tau_nonperc_spin = QDoubleSpinBox()
-        self.tau_nonperc_spin.setDecimals(2)
-        self.tau_nonperc_spin.setMaximum(1e9)
-        self.tau_nonperc_spin.setValue(1e6)
-
-        self.suppress_checkbox = QCheckBox()
-        self.suppress_checkbox.setChecked(True)
-
-        self.create_form_row(
-            "crop_start_y",
-            self.crop_y_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "crop_start_z",
-            self.crop_z_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "crop_start_x",
-            self.crop_x_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "large_vol_size",
-            self.large_vol_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "patch_size",
-            self.patch_size1_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "overlap",
-            self.overlap1_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "pore_value",
-            self.pore1_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "solid_value",
-            self.solid1_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "voxel_size_y",
-            self.voxel_y1_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "voxel_size_z",
-            self.voxel_z1_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "voxel_size_x",
-            self.voxel_x1_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "remove_small_pore_components",
-            self.remove_small_checkbox,
-            param_layout
-        )
-
-        self.create_form_row(
-            "min_pore_component_size",
-            self.min_pore_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "tau_nonperc_value",
-            self.tau_nonperc_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "suppress_taufactor_output",
-            self.suppress_checkbox,
-            param_layout
-        )
-
-        layout.addWidget(param_group)
-
-        # =====================================================
-        # btn
-        # =====================================================
-
-        btn_layout = QHBoxLayout()
-
-        btn = QPushButton(
-            "开始执行Stage5-1：构建空间异质局部条件场"
-        )
-
-        btn.setMinimumHeight(45)
-
-        btn.setStyleSheet("""
-            QPushButton{
-                background:#4f8cff;
-                color:white;
-                border-radius:8px;
-                font-size:15px;
-                font-weight:bold;
-            }
-            QPushButton:hover{
-                background:#6aa1ff;
-            }
-        """)
-
-        btn.clicked.connect(
-            self.start_local_condition_task
-        )
-
-        # ============================================
-        # reset
-        # ============================================
-
-        btn_reset = QPushButton("恢复默认参数")
-
-        btn_reset.setMinimumHeight(45)
-
-        btn_reset.setStyleSheet("""
-            QPushButton{
-                background:#666;
-                color:white;
-                border-radius:8px;
-                font-size:15px;
-                font-weight:bold;
-            }
-
-            QPushButton:hover{
-                background:#888;
-            }
-        """)
-
-        btn_reset.clicked.connect(
-            self.reset_local_condition_params
-        )
-
-        btn_layout.addWidget(btn)
-        btn_layout.addWidget(btn_reset)
-
-        layout.addLayout(btn_layout)
-
-    # =========================================================
-    # tab2
-    # =========================================================
-    def build_large_volume_tab(self):
-
-        layout = QVBoxLayout(self.tab_large_volume)
-
-        # =====================================================
-        # tip
-        # =====================================================
-        tip = QLabel(
-            "使用步骤1生成的local_conditions_json，生成224³大体积"
-        )
-
-        tip.setWordWrap(True)
-
-        tip.setStyleSheet("""
-            QLabel{
-                background:#25262b;
-                border:1px solid #4f8cff;
-                border-radius:8px;
-                padding:12px;
-                color:#4f8cff;
-                font-size:12px;
-            }
-        """)
-
-        layout.addWidget(tip)
-
-        # =====================================================
-        # model group
-        # =====================================================
-        model_group = QGroupBox("模型选择")
-
-        model_layout = QVBoxLayout(model_group)
+        g_layout = QVBoxLayout(group)
 
         self.vae_combo = QComboBox()
         self.ldm_combo = QComboBox()
 
-        self.model_path_label = QLabel("未选择模型")
+        self.model_label = QLabel("未选择模型")
 
-        self.model_path_label.setStyleSheet("""
+        self.model_label.setStyleSheet("""
             QLabel{
                 background:#1e1f24;
                 border-radius:5px;
@@ -500,111 +275,496 @@ class Stage5Page(QWidget):
         )
 
         row1 = QHBoxLayout()
-        row1.addWidget(QLabel("VAE模型"))
+        row1.addWidget(QLabel("VAE"))
         row1.addWidget(self.vae_combo)
 
         row2 = QHBoxLayout()
-        row2.addWidget(QLabel("LDM模型"))
+        row2.addWidget(QLabel("LDM"))
         row2.addWidget(self.ldm_combo)
 
-        model_layout.addLayout(row1)
-        model_layout.addLayout(row2)
-        model_layout.addWidget(self.model_path_label)
+        g_layout.addLayout(row1)
+        g_layout.addLayout(row2)
+        g_layout.addWidget(self.model_label)
 
-        layout.addWidget(model_group)
+        layout.addWidget(group)
 
-        # =====================================================
-        # file
-        # =====================================================
-        file_group = QGroupBox("输入输出")
+    # =========================================================
+    # path
+    # =========================================================
+    def build_path_group(self, layout):
 
-        file_layout = QVBoxLayout(file_group)
+        group = QGroupBox("路径参数")
 
-        self.local_json_edit = QLineEdit()
+        g_layout = QVBoxLayout(group)
+
         self.summary_json_edit = QLineEdit()
-
-        default_summary_json = resource_path(
-            "backend/electrode_twin/latent_dataset/dataset_summary.json"
-        )
-
         self.summary_json_edit.setText(
-            default_summary_json
+            self.default_summary_json
         )
-        self.out_dir2_edit = QLineEdit()
 
-        btn_local = QPushButton("选择local_conditions_json")
-        btn_summary = QPushButton("选择summary_json")
-        btn_out2 = QPushButton("选择输出目录")
-
-        btn_local.clicked.connect(
-            self.select_local_json
+        self.metrics_csv_edit = QLineEdit()
+        self.metrics_csv_edit.setText(
+            self.default_metrics_csv
         )
+
+        self.out_dir_edit = QLineEdit()
+
+        btn_summary = QPushButton("选择")
+        btn_metrics = QPushButton("选择")
+        btn_out = QPushButton("选择")
 
         btn_summary.clicked.connect(
             self.select_summary_json
         )
 
-        btn_out2.clicked.connect(
-            self.select_out_dir2
+        btn_metrics.clicked.connect(
+            self.select_metrics_csv
+        )
+
+        btn_out.clicked.connect(
+            self.select_out_dir
         )
 
         row1 = QHBoxLayout()
-        row1.addWidget(QLabel("local json"))
-        row1.addWidget(self.local_json_edit)
-        row1.addWidget(btn_local)
+        row1.addWidget(QLabel("summary_json"))
+        row1.addWidget(self.summary_json_edit)
+        row1.addWidget(btn_summary)
 
         row2 = QHBoxLayout()
-        row2.addWidget(QLabel("summary json"))
-        row2.addWidget(self.summary_json_edit)
-        row2.addWidget(btn_summary)
+        row2.addWidget(QLabel("train_metrics_table"))
+        row2.addWidget(self.metrics_csv_edit)
+        row2.addWidget(btn_metrics)
 
         row3 = QHBoxLayout()
         row3.addWidget(QLabel("输出目录"))
-        row3.addWidget(self.out_dir2_edit)
-        row3.addWidget(btn_out2)
+        row3.addWidget(self.out_dir_edit)
+        row3.addWidget(btn_out)
 
-        file_layout.addLayout(row1)
-        file_layout.addLayout(row2)
-        file_layout.addLayout(row3)
+        g_layout.addLayout(row1)
+        g_layout.addLayout(row2)
+        g_layout.addLayout(row3)
 
-        layout.addWidget(file_group)
+        layout.addWidget(group)
+
+    # =========================================================
+    # condition
+    # =========================================================
+    def build_condition_group(self, layout):
+
+        group = QGroupBox("条件输入")
+
+        g_layout = QVBoxLayout(group)
 
         # =====================================================
-        # params
+        # grid
         # =====================================================
-        param_group = QGroupBox("生成参数")
+        self.grid_y_spin = QSpinBox()
+        self.grid_z_spin = QSpinBox()
+        self.grid_x_spin = QSpinBox()
 
-        param_layout = QVBoxLayout(param_group)
+        self.grid_y_spin.setValue(2)
+        self.grid_z_spin.setValue(2)
+        self.grid_x_spin.setValue(2)
+
+        grid_row = QHBoxLayout()
+
+        grid_row.addWidget(QLabel("GRID_SHAPE"))
+
+        grid_row.addWidget(QLabel("Y"))
+        grid_row.addWidget(self.grid_y_spin)
+
+        grid_row.addWidget(QLabel("Z"))
+        grid_row.addWidget(self.grid_z_spin)
+
+        grid_row.addWidget(QLabel("X"))
+        grid_row.addWidget(self.grid_x_spin)
+
+        btn_refresh = QPushButton("刷新 Manual Patch 表格")
+
+        btn_refresh.clicked.connect(
+            self.build_manual_patch_editor
+        )
+
+        grid_row.addWidget(btn_refresh)
+
+        g_layout.addLayout(grid_row)
+
+        # =====================================================
+        # mode
+        # =====================================================
+        self.condition_mode_combo = QComboBox()
+
+        self.condition_mode_combo.addItems([
+            "uniform_porosity",
+            "manual_user",
+        ])
+
+        self.condition_mode_combo.currentTextChanged.connect(
+            self.on_condition_mode_changed
+        )
+
+        self.create_form_row(
+            "CONDITION_INPUT_MODE",
+            self.condition_mode_combo,
+            g_layout
+        )
+
+        # =====================================================
+        # uniform
+        # =====================================================
+        self.uniform_group = QGroupBox(
+            "uniform_porosity 模式"
+        )
+
+        uniform_layout = QVBoxLayout(
+            self.uniform_group
+        )
+
+        self.target_porosity_spin = QDoubleSpinBox()
+        self.target_porosity_spin.setDecimals(4)
+        self.target_porosity_spin.setRange(0, 1)
+        self.target_porosity_spin.setValue(0.30)
+
+        self.target_tau_spin = QDoubleSpinBox()
+        self.target_tau_spin.setDecimals(4)
+        self.target_tau_spin.setRange(0, 9999)
+        self.target_tau_spin.setValue(3.30)
+
+        self.create_form_row(
+            "TARGET_PATCH_POROSITY",
+            self.target_porosity_spin,
+            uniform_layout
+        )
+
+        self.create_form_row(
+            "TARGET_PATCH_TAU_Z",
+            self.target_tau_spin,
+            uniform_layout
+        )
+
+        g_layout.addWidget(
+            self.uniform_group
+        )
+
+        # =====================================================
+        # manual
+        # =====================================================
+        self.manual_group = QGroupBox(
+            "manual_user 模式"
+        )
+
+        manual_layout = QVBoxLayout(
+            self.manual_group
+        )
+
+        tip = QLabel(
+            "请为每个 patch 填写 porosity 与 tau_z"
+        )
+
+        tip.setStyleSheet("""
+            color:#4f8cff;
+            padding:6px;
+        """)
+
+        manual_layout.addWidget(tip)
+
+        self.manual_grid_layout = QGridLayout()
+
+        manual_layout.addLayout(
+            self.manual_grid_layout
+        )
+
+        g_layout.addWidget(
+            self.manual_group
+        )
+
+        layout.addWidget(group)
+
+        self.build_manual_patch_editor()
+
+        self.on_condition_mode_changed()
+
+    # =========================================================
+    # generation
+    # =========================================================
+    def build_generation_group(self, layout):
+
+        group = QGroupBox("生成参数")
+
+        g_layout = QVBoxLayout(group)
 
         self.device_combo = QComboBox()
         self.device_combo.addItems(["cuda", "cpu"])
-        self.device_combo.setCurrentText("cuda")
 
-        self.patch_size2_spin = QSpinBox()
-        self.patch_size2_spin.setRange(32, 512)
-        self.patch_size2_spin.setValue(128)
+        self.patch_size_spin = QSpinBox()
+        self.patch_size_spin.setValue(128)
 
-        self.overlap2_spin = QSpinBox()
-        self.overlap2_spin.setRange(0, 256)
-        self.overlap2_spin.setValue(32)
+        self.overlap_spin = QSpinBox()
+        self.overlap_spin.setValue(32)
 
         self.num_samples_spin = QSpinBox()
-        self.num_samples_spin.setRange(1, 2048)
-        self.num_samples_spin.setValue(64)
+        self.num_samples_spin.setValue(32)
+
+        self.auto_surface_combo = QComboBox()
+        self.auto_surface_combo.addItems([
+            "nearest_training_porosity_tau"
+        ])
+
+        self.auto_deff_combo = QComboBox()
+        self.auto_deff_combo.addItems([
+            "porosity_over_tau"
+        ])
+
+        self.pore_spin = QSpinBox()
+        self.pore_spin.setValue(0)
+
+        self.solid_spin = QSpinBox()
+        self.solid_spin.setValue(1)
+
+        self.voxel_y_spin = QDoubleSpinBox()
+        self.voxel_y_spin.setDecimals(6)
+        self.voxel_y_spin.setValue(0.0315)
+
+        self.voxel_z_spin = QDoubleSpinBox()
+        self.voxel_z_spin.setDecimals(6)
+        self.voxel_z_spin.setValue(0.02791)
+
+        self.voxel_x_spin = QDoubleSpinBox()
+        self.voxel_x_spin.setDecimals(6)
+        self.voxel_x_spin.setValue(0.02791)
+
+        self.remove_small_checkbox = QCheckBox()
+        self.remove_small_checkbox.setChecked(True)
+
+        self.min_pore_spin = QSpinBox()
+        self.min_pore_spin.setValue(10)
+
+        self.tau_nonperc_spin = QDoubleSpinBox()
+        self.tau_nonperc_spin.setMaximum(1e9)
+        self.tau_nonperc_spin.setValue(1e6)
+
+        self.suppress_checkbox = QCheckBox()
+        self.suppress_checkbox.setChecked(True)
+
+        self.create_form_row(
+            "DEVICE",
+            self.device_combo,
+            g_layout
+        )
+
+        self.create_form_row(
+            "PATCH_SIZE",
+            self.patch_size_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "OVERLAP",
+            self.overlap_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "NUM_SAMPLES_PER_PATCH",
+            self.num_samples_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "AUTO_SURFACE_MODE",
+            self.auto_surface_combo,
+            g_layout
+        )
+
+        self.create_form_row(
+            "AUTO_DEFF_MODE",
+            self.auto_deff_combo,
+            g_layout
+        )
+
+        self.create_form_row(
+            "PORE_VALUE",
+            self.pore_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "SOLID_VALUE",
+            self.solid_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "VOXEL_SIZE_Y",
+            self.voxel_y_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "VOXEL_SIZE_Z",
+            self.voxel_z_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "VOXEL_SIZE_X",
+            self.voxel_x_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "REMOVE_SMALL_PORE_COMPONENTS",
+            self.remove_small_checkbox,
+            g_layout
+        )
+
+        self.create_form_row(
+            "MIN_PORE_COMPONENT_SIZE",
+            self.min_pore_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "TAU_NONPERC_VALUE",
+            self.tau_nonperc_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "SUPPRESS_TAUFACTOR_OUTPUT",
+            self.suppress_checkbox,
+            g_layout
+        )
+
+        layout.addWidget(group)
+
+    # =========================================================
+    # threshold
+    # =========================================================
+    def build_threshold_group(self, layout):
+
+        group = QGroupBox("Threshold / Postprocess")
+
+        g_layout = QVBoxLayout(group)
 
         self.adaptive_checkbox = QCheckBox()
         self.adaptive_checkbox.setChecked(True)
 
-        self.threshold_iter_spin = QSpinBox()
-        self.threshold_iter_spin.setRange(1, 1000)
-        self.threshold_iter_spin.setValue(25)
+        self.adaptive_iter_spin = QSpinBox()
+        self.adaptive_iter_spin.setValue(25)
 
-        self.threshold_tol_spin = QDoubleSpinBox()
-        self.threshold_tol_spin.setDecimals(8)
-        self.threshold_tol_spin.setValue(1e-4)
+        self.adaptive_tol_spin = QDoubleSpinBox()
+        self.adaptive_tol_spin.setDecimals(8)
+        self.adaptive_tol_spin.setValue(1e-4)
+
+        self.threshold_offsets_edit = QTextEdit()
+        self.threshold_offsets_edit.setFixedHeight(80)
+
+        self.threshold_offsets_edit.setPlainText(
+            json.dumps(
+                [-0.04, -0.03, -0.02, -0.01,
+                 0.0,
+                 0.01, 0.02, 0.03, 0.04],
+                indent=2
+            )
+        )
+
+        self.postprocess_edit = QTextEdit()
+
+        self.postprocess_edit.setFixedHeight(180)
+
+        self.postprocess_edit.setPlainText(
+            json.dumps([
+                {
+                    "name": "raw",
+                    "mode": "none",
+                },
+                {
+                    "name": "erode1",
+                    "mode": "erode",
+                    "iters": 1,
+                },
+                {
+                    "name": "open1",
+                    "mode": "open",
+                    "iters": 1,
+                },
+            ], indent=2)
+        )
+
+        self.create_form_row(
+            "USE_ADAPTIVE_THRESHOLD_FOR_POROSITY",
+            self.adaptive_checkbox,
+            g_layout
+        )
+
+        self.create_form_row(
+            "ADAPTIVE_THRESHOLD_MAX_ITERS",
+            self.adaptive_iter_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "ADAPTIVE_THRESHOLD_TOL",
+            self.adaptive_tol_spin,
+            g_layout
+        )
+
+        g_layout.addWidget(
+            QLabel("THRESHOLD_OFFSETS")
+        )
+
+        g_layout.addWidget(
+            self.threshold_offsets_edit
+        )
+
+        g_layout.addWidget(
+            QLabel("POSTPROCESS_CONFIGS")
+        )
+
+        g_layout.addWidget(
+            self.postprocess_edit
+        )
+
+        layout.addWidget(group)
+
+    # =========================================================
+    # score
+    # =========================================================
+    def build_score_group(self, layout):
+
+        group = QGroupBox("Scoring / OOD")
+
+        g_layout = QVBoxLayout(group)
+
+        self.cheap_weights_edit = QTextEdit()
+        self.cheap_weights_edit.setFixedHeight(80)
+
+        self.cheap_weights_edit.setPlainText(
+            json.dumps({
+                "porosity": 4.0,
+            }, indent=2)
+        )
+
+        self.final_weights_edit = QTextEdit()
+        self.final_weights_edit.setFixedHeight(120)
+
+        self.final_weights_edit.setPlainText(
+            json.dumps({
+                "porosity": 4.0,
+                "tau_z": 5.0,
+                "deff_z": 0.5,
+            }, indent=2)
+        )
+
+        self.use_std_checkbox = QCheckBox()
+        self.use_std_checkbox.setChecked(True)
 
         self.topology_spin = QDoubleSpinBox()
         self.topology_spin.setValue(1.0)
+
+        self.min_solid_spin = QSpinBox()
+        self.min_solid_spin.setValue(10)
 
         self.topk_spin = QSpinBox()
         self.topk_spin.setValue(3)
@@ -615,133 +775,208 @@ class Stage5Page(QWidget):
         self.clip_checkbox = QCheckBox()
         self.clip_checkbox.setChecked(False)
 
-        self.create_form_row(
-            "device",
-            self.device_combo,
-            param_layout
+        g_layout.addWidget(
+            QLabel("CHEAP_ERROR_WEIGHTS")
+        )
+
+        g_layout.addWidget(
+            self.cheap_weights_edit
+        )
+
+        g_layout.addWidget(
+            QLabel("FINAL_ERROR_WEIGHTS")
+        )
+
+        g_layout.addWidget(
+            self.final_weights_edit
         )
 
         self.create_form_row(
-            "patch_size",
-            self.patch_size2_spin,
-            param_layout
+            "USE_STD_NORMALIZED_ERROR",
+            self.use_std_checkbox,
+            g_layout
         )
 
         self.create_form_row(
-            "overlap",
-            self.overlap2_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "num_samples_per_patch",
-            self.num_samples_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "use_adaptive_threshold",
-            self.adaptive_checkbox,
-            param_layout
-        )
-
-        self.create_form_row(
-            "adaptive_threshold_max_iters",
-            self.threshold_iter_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "adaptive_threshold_tol",
-            self.threshold_tol_spin,
-            param_layout
-        )
-
-        self.create_form_row(
-            "topology_penalty_weight",
+            "TOPOLOGY_PENALTY_WEIGHT",
             self.topology_spin,
-            param_layout
+            g_layout
         )
 
         self.create_form_row(
-            "exact_eval_topk_per_candidate",
+            "MIN_SOLID_COMPONENT_COUNT_SOFT",
+            self.min_solid_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "EXACT_EVAL_TOPK_PER_CANDIDATE",
             self.topk_spin,
-            param_layout
+            g_layout
         )
 
         self.create_form_row(
-            "warn_if_target_ood",
+            "WARN_IF_TARGET_OOD",
             self.warn_checkbox,
-            param_layout
+            g_layout
         )
 
         self.create_form_row(
-            "clip_condition_to_train_range",
+            "CLIP_NORMALIZED_CONDITION_TO_TRAIN_RANGE",
             self.clip_checkbox,
-            param_layout
+            g_layout
         )
 
-        layout.addWidget(param_group)
-
-        btn_layout = QHBoxLayout()
-
-        btn = QPushButton(
-            "开始执行Stage5-2：生成224³大体积"
-        )
-
-        btn.setMinimumHeight(45)
-
-        btn.setStyleSheet("""
-            QPushButton{
-                background:#4f8cff;
-                color:white;
-                border-radius:8px;
-                font-size:15px;
-                font-weight:bold;
-            }
-
-            QPushButton:hover{
-                background:#6aa1ff;
-            }
-        """)
-
-        btn.clicked.connect(
-            self.start_large_volume_task
-        )
-
-        # ============================================
-        # reset
-        # ============================================
-
-        btn_reset = QPushButton("恢复默认参数")
-
-        btn_reset.setMinimumHeight(45)
-
-        btn_reset.setStyleSheet("""
-            QPushButton{
-                background:#666;
-                color:white;
-                border-radius:8px;
-                font-size:15px;
-                font-weight:bold;
-            }
-
-            QPushButton:hover{
-                background:#888;
-            }
-        """)
-
-        btn_reset.clicked.connect(
-            self.reset_large_volume_params
-        )
-
-        btn_layout.addWidget(btn)
-        btn_layout.addWidget(btn_reset)
-
-        layout.addLayout(btn_layout)
+        layout.addWidget(group)
 
     # =========================================================
-    # model api
+    # slice
+    # =========================================================
+    def build_slice_group(self, layout):
+
+        group = QGroupBox("Slice Visualization")
+
+        g_layout = QVBoxLayout(group)
+
+        self.save_slice_checkbox = QCheckBox()
+        self.save_slice_checkbox.setChecked(True)
+
+        self.slice_style_combo = QComboBox()
+
+        self.slice_style_combo.addItems([
+            "black_yellow",
+            "white_blue",
+        ])
+
+        self.slice_axis_checkbox = QCheckBox()
+        self.slice_axis_checkbox.setChecked(False)
+
+        self.slice_dpi_spin = QSpinBox()
+        self.slice_dpi_spin.setValue(200)
+
+        self.create_form_row(
+            "SAVE_ALL_Y_ZX_SLICE_PNG",
+            self.save_slice_checkbox,
+            g_layout
+        )
+
+        self.create_form_row(
+            "SLICE_COLOR_STYLE",
+            self.slice_style_combo,
+            g_layout
+        )
+
+        self.create_form_row(
+            "SLICE_SHOW_AXIS",
+            self.slice_axis_checkbox,
+            g_layout
+        )
+
+        self.create_form_row(
+            "SLICE_DPI",
+            self.slice_dpi_spin,
+            g_layout
+        )
+
+        layout.addWidget(group)
+
+    # =========================================================
+    # manual patch
+    # =========================================================
+    def build_manual_patch_editor(self):
+
+        while self.manual_grid_layout.count():
+
+            item = self.manual_grid_layout.takeAt(0)
+
+            widget = item.widget()
+
+            if widget:
+                widget.deleteLater()
+
+        self.manual_patch_widgets = []
+
+        gy = self.grid_y_spin.value()
+        gz = self.grid_z_spin.value()
+        gx = self.grid_x_spin.value()
+
+        row = 0
+
+        for iy in range(gy):
+            for iz in range(gz):
+                for ix in range(gx):
+
+                    label = QLabel(
+                        f"Patch [{iy}, {iz}, {ix}]"
+                    )
+
+                    porosity_spin = QDoubleSpinBox()
+                    porosity_spin.setDecimals(4)
+                    porosity_spin.setRange(0, 1)
+                    porosity_spin.setValue(0.30)
+
+                    tau_spin = QDoubleSpinBox()
+                    tau_spin.setDecimals(4)
+                    tau_spin.setRange(0, 9999)
+                    tau_spin.setValue(3.30)
+
+                    self.manual_grid_layout.addWidget(
+                        label,
+                        row,
+                        0
+                    )
+
+                    self.manual_grid_layout.addWidget(
+                        QLabel("porosity"),
+                        row,
+                        1
+                    )
+
+                    self.manual_grid_layout.addWidget(
+                        porosity_spin,
+                        row,
+                        2
+                    )
+
+                    self.manual_grid_layout.addWidget(
+                        QLabel("tau_z"),
+                        row,
+                        3
+                    )
+
+                    self.manual_grid_layout.addWidget(
+                        tau_spin,
+                        row,
+                        4
+                    )
+
+                    self.manual_patch_widgets.append({
+                        "grid_index": [iy, iz, ix],
+                        "porosity": porosity_spin,
+                        "tau_z": tau_spin,
+                    })
+
+                    row += 1
+
+    # =========================================================
+    # condition mode
+    # =========================================================
+    def on_condition_mode_changed(self):
+
+        mode = self.condition_mode_combo.currentText()
+
+        if mode == "uniform_porosity":
+
+            self.uniform_group.setVisible(True)
+            self.manual_group.setVisible(False)
+
+        else:
+
+            self.uniform_group.setVisible(False)
+            self.manual_group.setVisible(True)
+
+    # =========================================================
+    # model
     # =========================================================
     def load_models(self):
 
@@ -806,9 +1041,6 @@ class Stage5Page(QWidget):
                 str(e)
             )
 
-    # =========================================================
-    # model changed
-    # =========================================================
     def on_vae_changed(self):
 
         self.selected_vae_path = \
@@ -828,61 +1060,39 @@ class Stage5Page(QWidget):
         vae_name = self.vae_combo.currentText()
         ldm_name = self.ldm_combo.currentText()
 
-        self.model_path_label.setText(
+        self.model_label.setText(
             f"VAE: {vae_name}\n"
             f"LDM: {ldm_name}"
         )
 
     # =========================================================
-    # select file
+    # select
     # =========================================================
-    def select_real_volume(self):
+    def select_summary_json(self):
 
         path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择真实体积",
-            "",
-            "NumPy (*.npy)"
-        )
-
-        if path:
-            self.real_volume_edit.setText(path)
-
-    def select_out_dir1(self):
-
-        path = QFileDialog.getExistingDirectory(
-            self,
-            "选择输出目录"
-        )
-
-        if path:
-            self.out_dir1_edit.setText(path)
-
-    def select_local_json(self):
-
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            "选择local json",
+            "选择 summary json",
             "",
             "JSON (*.json)"
         )
 
         if path:
-            self.local_json_edit.setText(path)
+            self.summary_json_edit.setText(path)
 
-    def select_summary_json(self):
+    def select_metrics_csv(self):
 
-        file_path, _ = QFileDialog.getOpenFileName(
+        path, _ = QFileDialog.getOpenFileName(
             self,
-            "选择 summary json",
+            "选择 metrics csv",
             "",
-            "JSON Files (*.json)"
+            "CSV (*.csv)"
         )
 
-        if file_path:
-            self.summary_json_edit.setText(file_path)
+        if path:
+            self.metrics_csv_edit.setText(path)
 
-    def select_out_dir2(self):
+    def select_out_dir(self):
 
         path = QFileDialog.getExistingDirectory(
             self,
@@ -890,26 +1100,37 @@ class Stage5Page(QWidget):
         )
 
         if path:
-            self.out_dir2_edit.setText(path)
+            self.out_dir_edit.setText(path)
 
     # =========================================================
-    # start task1
+    # payload
     # =========================================================
-    def start_local_condition_task(self):
-        # ============================================
-        # check
-        # ============================================
+    def build_manual_conditions(self):
 
-        if not self.real_volume_edit.text().strip():
-            QMessageBox.warning(
-                self,
-                "错误",
-                "请选择真实体积文件"
-            )
+        result = []
 
-            return
+        for item in self.manual_patch_widgets:
 
-        if not self.out_dir1_edit.text().strip():
+            result.append({
+                "grid_index":
+                    item["grid_index"],
+
+                "porosity":
+                    item["porosity"].value(),
+
+                "tau_z":
+                    item["tau_z"].value(),
+            })
+
+        return result
+
+    # =========================================================
+    # task
+    # =========================================================
+    def start_task(self):
+
+        if not self.out_dir_edit.text().strip():
+
             QMessageBox.warning(
                 self,
                 "错误",
@@ -918,141 +1139,44 @@ class Stage5Page(QWidget):
 
             return
 
-        payload = {
+        try:
 
-            "real_volume_path":
-                self.real_volume_edit.text(),
-
-            "out_dir":
-                self.out_dir1_edit.text(),
-
-            "crop_start_y":
-                self.crop_y_spin.value(),
-
-            "crop_start_z":
-                self.crop_z_spin.value(),
-
-            "crop_start_x":
-                self.crop_x_spin.value(),
-
-            "large_vol_size":
-                self.large_vol_spin.value(),
-
-            "patch_size":
-                self.patch_size1_spin.value(),
-
-            "overlap":
-                self.overlap1_spin.value(),
-
-            "pore_value":
-                self.pore1_spin.value(),
-
-            "solid_value":
-                self.solid1_spin.value(),
-
-            "voxel_size_y":
-                self.voxel_y1_spin.value(),
-
-            "voxel_size_z":
-                self.voxel_z1_spin.value(),
-
-            "voxel_size_x":
-                self.voxel_x1_spin.value(),
-
-            "remove_small_pore_components_flag":
-                self.remove_small_checkbox.isChecked(),
-
-            "min_pore_component_size":
-                self.min_pore_spin.value(),
-
-            "tau_nonperc_value":
-                self.tau_nonperc_spin.value(),
-
-            "suppress_taufactor_output":
-                self.suppress_checkbox.isChecked(),
-        }
-
-        result = create_task(
-            "/stage5/local-conditions-generate",
-            payload
-        )
-
-        # 提交成功弹窗
-        msg = QMessageBox(self)
-
-        msg.setWindowTitle("任务已提交")
-
-        msg.setText(
-            f"Stage5-1 任务已提交\n{result}！"
-        )
-
-        msg.setInformativeText(
-            "任务正在后台运行，请前往「历史任务中心」查看进度和结果。"
-        )
-
-        msg.setStandardButtons(
-            QMessageBox.Ok | QMessageBox.Cancel
-        )
-
-        msg.setDefaultButton(
-            QMessageBox.Ok
-        )
-        # 添加按钮
-        go_btn = msg.addButton(
-            "前往任务中心",
-            QMessageBox.ActionRole
-        )
-        ret = msg.exec_()
-        # 跳转任务中心
-        if (
-                ret == QMessageBox.Ok
-                or msg.clickedButton() == go_btn
-        ):
-            self.main_window.menu.setCurrentRow(6)
-
-    # =========================================================
-    # start task2
-    # =========================================================
-    def start_large_volume_task(self):
-
-        # ============================================
-        # check
-        # ============================================
-
-        if not self.local_json_edit.text().strip():
-            QMessageBox.warning(
-                self,
-                "错误",
-                "请选择local_conditions_json"
+            threshold_offsets = json.loads(
+                self.threshold_offsets_edit.toPlainText()
             )
 
-            return
-
-        if not self.summary_json_edit.text().strip():
-            QMessageBox.warning(
-                self,
-                "错误",
-                "请选择summary_json"
+            postprocess_configs = json.loads(
+                self.postprocess_edit.toPlainText()
             )
 
-            return
+            cheap_weights = json.loads(
+                self.cheap_weights_edit.toPlainText()
+            )
 
-        if not self.out_dir2_edit.text().strip():
+            final_weights = json.loads(
+                self.final_weights_edit.toPlainText()
+            )
+
+        except Exception as e:
+
             QMessageBox.warning(
                 self,
-                "错误",
-                "请选择输出目录"
+                "JSON错误",
+                str(e)
             )
 
             return
 
         payload = {
 
-            "local_conditions_json":
-                self.local_json_edit.text(),
-
+            # =================================================
+            # path
+            # =================================================
             "summary_json_path":
                 self.summary_json_edit.text(),
+
+            "train_metrics_table_path":
+                self.metrics_csv_edit.text(),
 
             "ldm_ckpt_path":
                 self.selected_ldm_path,
@@ -1061,170 +1185,249 @@ class Stage5Page(QWidget):
                 self.selected_vae_path,
 
             "out_dir":
-                self.out_dir2_edit.text(),
+                self.out_dir_edit.text(),
 
+            # =================================================
+            # device
+            # =================================================
             "device":
                 self.device_combo.currentText(),
 
+            # =================================================
+            # patch
+            # =================================================
             "patch_size":
-                self.patch_size2_spin.value(),
+                self.patch_size_spin.value(),
 
             "overlap":
-                self.overlap2_spin.value(),
+                self.overlap_spin.value(),
 
+            "grid_shape": [
+                self.grid_y_spin.value(),
+                self.grid_z_spin.value(),
+                self.grid_x_spin.value(),
+            ],
+
+            # =================================================
+            # condition
+            # =================================================
+            "condition_input_mode":
+                self.condition_mode_combo.currentText(),
+
+            "target_patch_porosity":
+                self.target_porosity_spin.value(),
+
+            "target_patch_tau_z":
+                self.target_tau_spin.value(),
+
+            "manual_patch_conditions":
+                self.build_manual_conditions(),
+
+            # =================================================
+            # auto
+            # =================================================
+            "auto_surface_mode":
+                self.auto_surface_combo.currentText(),
+
+            "auto_deff_mode":
+                self.auto_deff_combo.currentText(),
+
+            # =================================================
+            # generation
+            # =================================================
             "num_samples_per_patch":
                 self.num_samples_spin.value(),
 
+            "pore_value":
+                self.pore_spin.value(),
+
+            "solid_value":
+                self.solid_spin.value(),
+
+            # =================================================
+            # voxel
+            # =================================================
+            "voxel_size_y":
+                self.voxel_y_spin.value(),
+
+            "voxel_size_z":
+                self.voxel_z_spin.value(),
+
+            "voxel_size_x":
+                self.voxel_x_spin.value(),
+
+            # =================================================
+            # clean
+            # =================================================
+            "remove_small_pore_components":
+                self.remove_small_checkbox.isChecked(),
+
+            "min_pore_component_size":
+                self.min_pore_spin.value(),
+
+            # =================================================
+            # threshold
+            # =================================================
             "use_adaptive_threshold_for_porosity":
                 self.adaptive_checkbox.isChecked(),
 
             "adaptive_threshold_max_iters":
-                self.threshold_iter_spin.value(),
+                self.adaptive_iter_spin.value(),
 
             "adaptive_threshold_tol":
-                self.threshold_tol_spin.value(),
+                self.adaptive_tol_spin.value(),
+
+            "threshold_offsets":
+                threshold_offsets,
+
+            # =================================================
+            # score
+            # =================================================
+            "cheap_error_weights":
+                cheap_weights,
+
+            "final_error_weights":
+                final_weights,
+
+            "use_std_normalized_error":
+                self.use_std_checkbox.isChecked(),
 
             "topology_penalty_weight":
                 self.topology_spin.value(),
 
+            "min_solid_component_count_soft":
+                self.min_solid_spin.value(),
+
             "exact_eval_topk_per_candidate":
                 self.topk_spin.value(),
 
+            # =================================================
+            # ood
+            # =================================================
             "warn_if_target_ood":
                 self.warn_checkbox.isChecked(),
 
             "clip_normalized_condition_to_train_range":
                 self.clip_checkbox.isChecked(),
+
+            # =================================================
+            # tau
+            # =================================================
+            "tau_nonperc_value":
+                self.tau_nonperc_spin.value(),
+
+            "suppress_taufactor_output":
+                self.suppress_checkbox.isChecked(),
+
+            # =================================================
+            # slice
+            # =================================================
+            "save_all_y_zx_slice_png":
+                self.save_slice_checkbox.isChecked(),
+
+            "slice_color_style":
+                self.slice_style_combo.currentText(),
+
+            "slice_show_axis":
+                self.slice_axis_checkbox.isChecked(),
+
+            "slice_dpi":
+                self.slice_dpi_spin.value(),
         }
 
         result = create_task(
-            "/stage5/large-volume-generate",
+            "/stage5/generate-specific-volume",
             payload
         )
 
-        # 提交成功弹窗
         msg = QMessageBox(self)
 
         msg.setWindowTitle("任务已提交")
 
         msg.setText(
-            f"Stage5-1 任务已提交\n{result}！"
+            f"Stage5 任务已提交\n{result}"
         )
 
         msg.setInformativeText(
-            "任务正在后台运行，请前往「历史任务中心」查看进度和结果。"
+            "任务正在后台运行，请前往历史任务中心查看"
         )
 
         msg.setStandardButtons(
             QMessageBox.Ok | QMessageBox.Cancel
         )
 
-        msg.setDefaultButton(
-            QMessageBox.Ok
-        )
-        # 添加按钮
         go_btn = msg.addButton(
             "前往任务中心",
             QMessageBox.ActionRole
         )
-        ret = msg.exec_()
-        # 跳转任务中心
+
+        ret = msg.exec()
+
         if (
                 ret == QMessageBox.Ok
                 or msg.clickedButton() == go_btn
         ):
             self.main_window.menu.setCurrentRow(6)
 
-    def reset_local_condition_params(self):
+    # =========================================================
+    # reset
+    # =========================================================
+    def reset_params(self):
 
-        # file
-        self.real_volume_edit.clear()
-        self.out_dir1_edit.clear()
+        self.device_combo.setCurrentText("cuda")
 
-        # crop
-        self.crop_y_spin.setValue(0)
-        self.crop_z_spin.setValue(100)
-        self.crop_x_spin.setValue(0)
+        self.patch_size_spin.setValue(128)
 
-        # volume
-        self.large_vol_spin.setValue(224)
+        self.overlap_spin.setValue(32)
 
-        # patch
-        self.patch_size1_spin.setValue(128)
-        self.overlap1_spin.setValue(32)
+        self.grid_y_spin.setValue(2)
+        self.grid_z_spin.setValue(2)
+        self.grid_x_spin.setValue(2)
 
-        # phase
-        self.pore1_spin.setValue(0)
-        self.solid1_spin.setValue(1)
+        self.condition_mode_combo.setCurrentText(
+            "uniform_porosity"
+        )
 
-        # voxel
-        self.voxel_y1_spin.setValue(0.0315)
-        self.voxel_z1_spin.setValue(0.02791)
-        self.voxel_x1_spin.setValue(0.02791)
+        self.target_porosity_spin.setValue(0.30)
 
-        # clean
+        self.target_tau_spin.setValue(3.30)
+
+        self.num_samples_spin.setValue(32)
+
         self.remove_small_checkbox.setChecked(True)
 
         self.min_pore_spin.setValue(10)
 
-        # tau
-        self.tau_nonperc_spin.setValue(1e6)
-
-        self.suppress_checkbox.setChecked(True)
-
-        QMessageBox.information(
-            self,
-            "提示",
-            "Stage5-1 参数已恢复默认"
-        )
-
-    def reset_large_volume_params(self):
-
-        # file
-        self.local_json_edit.clear()
-
-        self.summary_json_edit.setText(
-            self.default_summary_json
-        )
-
-        self.out_dir2_edit.clear()
-
-        # model
-        if self.vae_combo.count() > 0:
-            self.vae_combo.setCurrentIndex(0)
-
-        if self.ldm_combo.count() > 0:
-            self.ldm_combo.setCurrentIndex(0)
-
-        # device
-        self.device_combo.setCurrentText("cuda")
-
-        # patch
-        self.patch_size2_spin.setValue(128)
-        self.overlap2_spin.setValue(32)
-
-        # sample
-        self.num_samples_spin.setValue(64)
-
-        # threshold
         self.adaptive_checkbox.setChecked(True)
 
-        self.threshold_iter_spin.setValue(25)
+        self.adaptive_iter_spin.setValue(25)
 
-        self.threshold_tol_spin.setValue(1e-4)
+        self.adaptive_tol_spin.setValue(1e-4)
 
-        # topology
         self.topology_spin.setValue(1.0)
+
+        self.min_solid_spin.setValue(10)
 
         self.topk_spin.setValue(3)
 
-        # flags
         self.warn_checkbox.setChecked(True)
 
         self.clip_checkbox.setChecked(False)
 
+        self.save_slice_checkbox.setChecked(True)
+
+        self.slice_style_combo.setCurrentText(
+            "black_yellow"
+        )
+
+        self.slice_axis_checkbox.setChecked(False)
+
+        self.slice_dpi_spin.setValue(200)
+
+        self.build_manual_patch_editor()
+
         QMessageBox.information(
             self,
             "提示",
-            "Stage5-2 参数已恢复默认"
+            "参数已恢复默认"
         )
