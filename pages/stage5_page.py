@@ -497,12 +497,15 @@ class Stage5Page(QWidget):
         self.device_combo.addItems(["cuda", "cpu"])
 
         self.patch_size_spin = QSpinBox()
+        self.patch_size_spin.setMaximum(1024)
         self.patch_size_spin.setValue(128)
 
         self.overlap_spin = QSpinBox()
+        self.overlap_spin.setMaximum(1024)
         self.overlap_spin.setValue(32)
 
         self.num_samples_spin = QSpinBox()
+        self.num_samples_spin.setMaximum(1024)
         self.num_samples_spin.setValue(32)
 
         self.auto_surface_combo = QComboBox()
@@ -852,6 +855,7 @@ class Stage5Page(QWidget):
         self.slice_axis_checkbox.setChecked(False)
 
         self.slice_dpi_spin = QSpinBox()
+        self.slice_dpi_spin.setMaximum(10000)
         self.slice_dpi_spin.setValue(200)
 
         self.create_form_row(

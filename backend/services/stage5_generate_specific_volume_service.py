@@ -147,7 +147,7 @@ def assembled_shape_from_grid(
 # 8. 沿 Y 方向 ZX 切片保存函数
 # ============================================================
 
-def get_binary_cmap():
+def get_binary_cmap(cfg: config.GenerateSpecificVolumeConfig,):
     """
     获取 AM-pore 二值结构颜色表。
 
@@ -155,13 +155,13 @@ def get_binary_cmap():
         0 = PORE
         1 = AM / SOLID
     """
-    if config.GenerateSpecificVolumeConfig.slice_color_style == "black_yellow":
+    if cfg.slice_color_style == "black_yellow":
         return ListedColormap([
             [1.0, 0.78, 0.0],  # 0 = PORE，黄色
             [0.0, 0.0, 0.0],  # 1 = AM/SOLID，黑色
         ])
 
-    if config.GenerateSpecificVolumeConfig.slice_color_style == "white_blue":
+    if cfg.slice_color_style == "white_blue":
         return ListedColormap([
             [1.0, 1.0, 1.0],  # 0 = PORE，白色
             [0.1, 0.35, 0.75],  # 1 = AM/SOLID，蓝色
@@ -171,8 +171,10 @@ def get_binary_cmap():
 
 
 def save_all_y_zx_slice_pngs(
+        cfg: config.GenerateSpecificVolumeConfig,
         volume_yzx: np.ndarray,
         out_root: str,
+        log_fn=None,
 ) -> Dict[str, str]:
     """
     只保存最终体数据沿 Y 方向的全部 ZX 截面 PNG 图。
@@ -197,13 +199,13 @@ def save_all_y_zx_slice_pngs(
     slice_png_dir = os.path.join(out_root, "all_Y_slices_ZX_png")
     ensure_dir(slice_png_dir)
 
-    cmap = get_binary_cmap()
+    cmap = get_binary_cmap(cfg=cfg)
 
-    print("\n开始保存沿 Y 方向的全部 ZX 截面 PNG 图...")
-    print(f"  volume shape [Y,Z,X] = {volume_yzx.shape}")
-    print(f"  总切片数 Y = {ny}")
-    print(f"  每张 ZX 截面 shape [Z,X] = {(nz, nx)}")
-    print(f"  输出目录 = {slice_png_dir}")
+    log_fn("\n开始保存沿 Y 方向的全部 ZX 截面 PNG 图...")
+    log_fn(f"  volume shape [Y,Z,X] = {volume_yzx.shape}")
+    log_fn(f"  总切片数 Y = {ny}")
+    log_fn(f"  每张 ZX 截面 shape [Z,X] = {(nz, nx)}")
+    log_fn(f"  输出目录 = {slice_png_dir}")
 
     for y in range(ny):
         slice_zx = volume_yzx[y, :, :]  # 固定 y，得到 ZX 截面
@@ -222,7 +224,7 @@ def save_all_y_zx_slice_pngs(
             vmax=1
         )
 
-        if config.GenerateSpecificVolumeConfig.slice_show_axis:
+        if cfg.slice_show_axis:
             ax.set_title(f"ZX slice at Y = {y}", fontsize=12)
             ax.set_xlabel("X")
             ax.set_ylabel("Z")
@@ -230,13 +232,13 @@ def save_all_y_zx_slice_pngs(
             ax.axis("off")
 
         plt.tight_layout()
-        plt.savefig(png_path, dpi=config.GenerateSpecificVolumeConfig.slice_dpi, bbox_inches="tight", pad_inches=0.02)
+        plt.savefig(png_path, dpi=cfg.slice_dpi, bbox_inches="tight", pad_inches=0.02)
         plt.close(fig)
 
         if (y + 1) % 10 == 0 or (y + 1) == ny:
-            print(f"  已保存 {y + 1}/{ny} 张 ZX 截面 PNG")
+            log_fn(f"  已保存 {y + 1}/{ny} 张 ZX 截面 PNG")
 
-    print("沿 Y 方向全部 ZX 截面 PNG 图保存完成。")
+    log_fn("沿 Y 方向全部 ZX 截面 PNG 图保存完成。")
 
     return {
         "all_y_zx_slice_png_dir": slice_png_dir,
@@ -256,7 +258,7 @@ def summary_surface_mean(summary: Dict) -> float:
     return float(summary["surface"]["mean"])
 
 
-def load_training_metrics_table(path: str) -> List[Dict[str, float]]:
+def load_training_metrics_table(path: str, log_fn=None) -> List[Dict[str, float]]:
     """
     读取训练集逐样本指标表。
 
@@ -274,8 +276,8 @@ def load_training_metrics_table(path: str) -> List[Dict[str, float]]:
         return []
 
     if not os.path.exists(path):
-        print(f"[提示] 未找到训练集指标表: {path}")
-        print("[提示] surface_area 将使用 dataset_summary 中 surface mean。")
+        log_fn(f"[提示] 未找到训练集指标表: {path}")
+        log_fn("[提示] surface_area 将使用 dataset_summary 中 surface mean。")
         return []
 
     ext = os.path.splitext(path)[1].lower()
@@ -351,8 +353,8 @@ def load_training_metrics_table(path: str) -> List[Dict[str, float]]:
         except Exception:
             continue
 
-    print(f"训练集指标表读取完成: {path}")
-    print(f"  有效样本数 = {len(clean_rows)}")
+    log_fn(f"训练集指标表读取完成: {path}")
+    log_fn(f"  有效样本数 = {len(clean_rows)}")
 
     return clean_rows
 
@@ -422,11 +424,11 @@ def estimate_deff_from_porosity_tau(porosity_value: float, tau_value: float) -> 
 # 10. 指标函数
 # ============================================================
 
-def remove_small_pore_components(volume: np.ndarray, min_size: int) -> np.ndarray:
+def remove_small_pore_components(volume: np.ndarray, min_size: int, cfg: config.GenerateSpecificVolumeConfig,) -> np.ndarray:
     if min_size <= 1:
         return volume.copy().astype(np.uint8)
 
-    pore_mask = (volume == config.GenerateSpecificVolumeConfig.pore_value)
+    pore_mask = (volume == cfg.pore_value)
     labeled, num = label(pore_mask)
 
     if num == 0:
@@ -439,32 +441,32 @@ def remove_small_pore_components(volume: np.ndarray, min_size: int) -> np.ndarra
         if sizes[comp_id] >= min_size:
             keep_pore[labeled == comp_id] = True
 
-    cleaned = np.where(keep_pore, config.GenerateSpecificVolumeConfig.pore_value,
-                       config.GenerateSpecificVolumeConfig.solid_value).astype(np.uint8)
+    cleaned = np.where(keep_pore, cfg.pore_value,
+                       cfg.solid_value).astype(np.uint8)
     return cleaned
 
 
-def porosity(volume01: np.ndarray) -> float:
-    return float((volume01 == config.GenerateSpecificVolumeConfig.pore_value).mean())
+def porosity(volume01: np.ndarray, cfg: config.GenerateSpecificVolumeConfig,) -> float:
+    return float((volume01 == cfg.pore_value).mean())
 
 
-def surface_area(volume01: np.ndarray) -> float:
+def surface_area(volume01: np.ndarray, cfg: config.GenerateSpecificVolumeConfig,) -> float:
     v = volume01.astype(np.uint8)
 
     n_y = np.abs(v[1:, :, :] - v[:-1, :, :]).sum()
     n_z = np.abs(v[:, 1:, :] - v[:, :-1, :]).sum()
     n_x = np.abs(v[:, :, 1:] - v[:, :, :-1]).sum()
 
-    area_y = n_y * (config.GenerateSpecificVolumeConfig.voxel_size_z * config.GenerateSpecificVolumeConfig.voxel_size_x)
-    area_z = n_z * (config.GenerateSpecificVolumeConfig.voxel_size_y * config.GenerateSpecificVolumeConfig.voxel_size_x)
-    area_x = n_x * (config.GenerateSpecificVolumeConfig.voxel_size_y * config.GenerateSpecificVolumeConfig.voxel_size_z)
+    area_y = n_y * (cfg.voxel_size_z * cfg.voxel_size_x)
+    area_z = n_z * (cfg.voxel_size_y * cfg.voxel_size_x)
+    area_x = n_x * (cfg.voxel_size_y * cfg.voxel_size_z)
 
     total_area = area_y + area_z + area_x
 
     total_volume = (
-            volume01.shape[0] * config.GenerateSpecificVolumeConfig.voxel_size_y *
-            volume01.shape[1] * config.GenerateSpecificVolumeConfig.voxel_size_z *
-            volume01.shape[2] * config.GenerateSpecificVolumeConfig.voxel_size_x
+            volume01.shape[0] * cfg.voxel_size_y *
+            volume01.shape[1] * cfg.voxel_size_z *
+            volume01.shape[2] * cfg.voxel_size_x
     )
 
     if total_volume <= 0:
@@ -473,8 +475,8 @@ def surface_area(volume01: np.ndarray) -> float:
     return float(total_area / total_volume)
 
 
-def largest_connected_ratio(volume01: np.ndarray) -> float:
-    pore_mask = (volume01 == config.GenerateSpecificVolumeConfig.pore_value)
+def largest_connected_ratio(volume01: np.ndarray, cfg: config.GenerateSpecificVolumeConfig,) -> float:
+    pore_mask = (volume01 == cfg.pore_value)
     labeled, num = label(pore_mask)
 
     sizes = np.bincount(labeled.ravel())
@@ -490,14 +492,14 @@ def largest_connected_ratio(volume01: np.ndarray) -> float:
     return float(largest / total)
 
 
-def solid_component_count(volume01: np.ndarray) -> int:
-    solid_mask = (volume01 == config.GenerateSpecificVolumeConfig.solid_value)
+def solid_component_count(volume01: np.ndarray, cfg: config.GenerateSpecificVolumeConfig,) -> int:
+    solid_mask = (volume01 == cfg.solid_value)
     _, num = label(solid_mask)
     return int(num)
 
 
-def is_percolating_along_z(volume: np.ndarray) -> bool:
-    pore_mask = (volume == config.GenerateSpecificVolumeConfig.pore_value)
+def is_percolating_along_z(volume: np.ndarray, cfg: config.GenerateSpecificVolumeConfig,) -> bool:
+    pore_mask = (volume == cfg.pore_value)
 
     labeled, num = label(pore_mask)
     if num == 0:
@@ -512,25 +514,25 @@ def is_percolating_along_z(volume: np.ndarray) -> bool:
     return len(common) > 0
 
 
-def compute_tau_deff_z(volume: np.ndarray) -> tuple[float, float, int]:
+def compute_tau_deff_z(volume: np.ndarray, cfg: config.GenerateSpecificVolumeConfig,) -> tuple[float, float, int]:
     percolating = is_percolating_along_z(volume)
 
     if not percolating:
-        return float(config.GenerateSpecificVolumeConfig.tau_nonperc_value), 0.0, 0
+        return float(cfg.tau_nonperc_value), 0.0, 0
 
-    pore_phase = (volume == config.GenerateSpecificVolumeConfig.pore_value).astype(np.uint8)  # [Y, Z, X]
+    pore_phase = (volume == cfg.pore_value).astype(np.uint8)  # [Y, Z, X]
     pore_phase_zyx = np.transpose(pore_phase, (1, 0, 2))  # [Z, Y, X]
 
     try:
-        with suppress_stdout_stderr(config.GenerateSpecificVolumeConfig.suppress_taufactor_output):
+        with suppress_stdout_stderr(cfg.suppress_taufactor_output):
             solver = tau.Solver(pore_phase_zyx)
             solver.solve()
 
-        tau_value = safe_scalar(solver.tau, default=config.GenerateSpecificVolumeConfig.tau_nonperc_value)
+        tau_value = safe_scalar(solver.tau, default=cfg.tau_nonperc_value)
         deff_value = safe_scalar(solver.D_eff, default=0.0)
 
         if not np.isfinite(tau_value):
-            tau_value = float(config.GenerateSpecificVolumeConfig.tau_nonperc_value)
+            tau_value = float(cfg.tau_nonperc_value)
 
         if not np.isfinite(deff_value):
             deff_value = 0.0
@@ -538,21 +540,21 @@ def compute_tau_deff_z(volume: np.ndarray) -> tuple[float, float, int]:
         return float(tau_value), float(deff_value), 1
 
     except Exception:
-        return float(config.GenerateSpecificVolumeConfig.tau_nonperc_value), 0.0, 0
+        return float(cfg.tau_nonperc_value), 0.0, 0
 
 
-def compute_generated_metrics_cheap(bin_volume: np.ndarray) -> Dict[str, float]:
+def compute_generated_metrics_cheap(bin_volume: np.ndarray, cfg: config.GenerateSpecificVolumeConfig,) -> Dict[str, float]:
     return {
-        "porosity": porosity(bin_volume),
-        "surface_area": surface_area(bin_volume),
-        "largest_connected_ratio": largest_connected_ratio(bin_volume),
-        "solid_component_count": solid_component_count(bin_volume),
+        "porosity": porosity(bin_volume, cfg=cfg),
+        "surface_area": surface_area(bin_volume, cfg=cfg),
+        "largest_connected_ratio": largest_connected_ratio(bin_volume, cfg=cfg),
+        "solid_component_count": solid_component_count(bin_volume, cfg=cfg),
     }
 
 
-def compute_generated_metrics_exact(bin_volume: np.ndarray) -> Dict[str, float]:
+def compute_generated_metrics_exact(bin_volume: np.ndarray, cfg: config.GenerateSpecificVolumeConfig,) -> Dict[str, float]:
     cheap = compute_generated_metrics_cheap(bin_volume)
-    tau_z, deff_z, is_perc = compute_tau_deff_z(bin_volume)
+    tau_z, deff_z, is_perc = compute_tau_deff_z(bin_volume, cfg=cfg,)
 
     out = dict(cheap)
     out.update({
@@ -614,13 +616,13 @@ def complete_condition_from_porosity_tau(
     return condition, auto_info
 
 
-def get_manual_condition_lookup() -> Dict[Tuple[int, int, int], Dict[str, Any]]:
+def get_manual_condition_lookup(manual_patch_conditions) -> Dict[Tuple[int, int, int], Dict[str, Any]]:
     """
     把 MANUAL_PATCH_CONDITIONS 转成 grid_index -> condition 的字典。
     """
     lookup = {}
 
-    for item in config.GenerateSpecificVolumeConfig.manual_patch_conditions:
+    for item in manual_patch_conditions:
         if "grid_index" not in item:
             raise ValueError("manual_user 模式下，每个条目必须包含 grid_index。")
 
@@ -648,6 +650,7 @@ def get_manual_condition_lookup() -> Dict[Tuple[int, int, int], Dict[str, Any]]:
 def build_user_local_conditions(
         summary: Dict,
         training_metrics: List[Dict[str, float]],
+        cfg: config.GenerateSpecificVolumeConfig,
 ) -> Tuple[List[Dict], Dict]:
     """
     构建 patch 条件表。
@@ -655,10 +658,10 @@ def build_user_local_conditions(
     输出结构与原始 local_conditions 逻辑相似，
     但条件来自用户输入而不是从真实体数据裁剪。
     """
-    n_patch = product_int(config.GenerateSpecificVolumeConfig.grid_shape)
+    n_patch = product_int(cfg.grid_shape)
 
-    if config.GenerateSpecificVolumeConfig.condition_input_mode == "manual_user":
-        manual_lookup = get_manual_condition_lookup()
+    if cfg.condition_input_mode == "manual_user":
+        manual_lookup = get_manual_condition_lookup(cfg.manual_patch_conditions)
 
         if len(manual_lookup) != n_patch:
             raise ValueError(
@@ -672,16 +675,16 @@ def build_user_local_conditions(
 
     idx = 0
 
-    for iy, iz, ix in grid_indices(config.GenerateSpecificVolumeConfig.grid_shape):
-        if config.GenerateSpecificVolumeConfig.condition_input_mode == "uniform_porosity":
-            por = float(config.GenerateSpecificVolumeConfig.target_patch_porosity)
-            tau_value = float(config.GenerateSpecificVolumeConfig.target_patch_tau_z)
+    for iy, iz, ix in grid_indices(cfg.grid_shape):
+        if cfg.condition_input_mode == "uniform_porosity":
+            por = float(cfg.target_patch_porosity)
+            tau_value = float(cfg.target_patch_tau_z)
             raw_user_condition = {
                 "porosity": por,
                 "tau_z": tau_value,
             }
 
-        elif config.GenerateSpecificVolumeConfig.condition_input_mode == "manual_user":
+        elif cfg.condition_input_mode == "manual_user":
             key = (iy, iz, ix)
 
             if key not in manual_lookup:
@@ -706,9 +709,9 @@ def build_user_local_conditions(
             summary=summary,
         )
 
-        y0 = iy * config.GenerateSpecificVolumeConfig().stride
-        z0 = iz * config.GenerateSpecificVolumeConfig().stride
-        x0 = ix * config.GenerateSpecificVolumeConfig().stride
+        y0 = iy * cfg.stride
+        z0 = iz * cfg.stride
+        x0 = ix * cfg.stride
 
         patch_name = f"user_patch_{idx:03d}_y{iy}_z{iz}_x{ix}"
 
@@ -724,9 +727,9 @@ def build_user_local_conditions(
 
         idx += 1
 
-    out_shape = assembled_shape_from_grid(config.GenerateSpecificVolumeConfig.grid_shape,
-                                          config.GenerateSpecificVolumeConfig.patch_size,
-                                          config.GenerateSpecificVolumeConfig().stride)
+    out_shape = assembled_shape_from_grid(cfg.grid_shape,
+                                          cfg.patch_size,
+                                          cfg.stride)
 
     target_global_condition = {
         "porosity": float(np.mean([p["metrics"]["porosity"] for p in local_conditions])),
@@ -737,21 +740,21 @@ def build_user_local_conditions(
 
     info = {
         "mode": "user_defined_porosity_tau_conditions",
-        "condition_input_mode": config.GenerateSpecificVolumeConfig.condition_input_mode,
-        "grid_shape_yzx": list(config.GenerateSpecificVolumeConfig.grid_shape),
-        "patch_size": config.GenerateSpecificVolumeConfig.patch_size,
-        "overlap": config.GenerateSpecificVolumeConfig.overlap,
-        "stride": config.GenerateSpecificVolumeConfig().stride,
+        "condition_input_mode": cfg.condition_input_mode,
+        "grid_shape_yzx": list(cfg.grid_shape),
+        "patch_size": cfg.patch_size,
+        "overlap": cfg.overlap,
+        "stride": cfg.stride,
         "assembled_shape_yzx": list(out_shape),
         "num_patches": len(local_conditions),
         "user_input_keys": ["porosity", "tau_z"],
         "model_condition_keys": MODEL_CONDITION_KEYS,
         "surface_area_auto_selection": {
-            "mode": config.GenerateSpecificVolumeConfig.auto_surface_mode,
-            "training_metrics_table_path": config.GenerateSpecificVolumeConfig.train_metrics_table_path,
+            "mode": cfg.auto_surface_mode,
+            "training_metrics_table_path": cfg.train_metrics_table_path,
             "fallback": "dataset_summary surface mean if training metrics table is missing",
         },
-        "deff_z_auto_rule": config.GenerateSpecificVolumeConfig.auto_deff_mode,
+        "deff_z_auto_rule": cfg.auto_deff_mode,
         "target_global_condition": target_global_condition,
         "local_conditions": local_conditions,
     }
@@ -788,7 +791,7 @@ def validate_target_condition(cond_raw: Dict[str, float], summary: Dict) -> List
     return range_report
 
 
-def normalize_condition(cond_raw: Dict[str, float], summary: Dict) -> np.ndarray:
+def normalize_condition(cond_raw: Dict[str, float], summary: Dict, cfg: config.GenerateSpecificVolumeConfig, log_fn=None) -> np.ndarray:
     vals = []
 
     for key in MODEL_CONDITION_KEYS:
@@ -798,13 +801,13 @@ def normalize_condition(cond_raw: Dict[str, float], summary: Dict) -> np.ndarray
         vmin = float(summary[skey]["min"])
         vmax = float(summary[skey]["max"])
 
-        if config.GenerateSpecificVolumeConfig.warn_if_target_ood and (raw_val < vmin or raw_val > vmax):
-            print(f"[警告] 条件 {key} = {raw_val:.6f} 超出训练范围 [{vmin:.6f}, {vmax:.6f}]")
+        if cfg.warn_if_target_ood and (raw_val < vmin or raw_val > vmax):
+            log_fn(f"[警告] 条件 {key} = {raw_val:.6f} 超出训练范围 [{vmin:.6f}, {vmax:.6f}]")
 
         denom = max(vmax - vmin, 1e-12)
         norm_val = (raw_val - vmin) / denom
 
-        if config.GenerateSpecificVolumeConfig.clip_normalized_condition_to_train_range:
+        if cfg.clip_normalized_condition_to_train_range:
             norm_val = float(np.clip(norm_val, 0.0, 1.0))
 
         vals.append(norm_val)
@@ -865,7 +868,7 @@ def threshold_prob_volume(prob_volume: np.ndarray, threshold: float) -> np.ndarr
 def postprocess_solid_topology(bin_volume: np.ndarray, cfg: Dict) -> np.ndarray:
     mode = cfg["mode"]
 
-    solid = (bin_volume == config.GenerateSpecificVolumeConfig.solid_value)
+    solid = (bin_volume == config.solid_value)
 
     if mode == "none":
         solid2 = solid
@@ -887,8 +890,8 @@ def postprocess_solid_topology(bin_volume: np.ndarray, cfg: Dict) -> np.ndarray:
     else:
         raise ValueError(f"未知后处理模式: {mode}")
 
-    return np.where(solid2, config.GenerateSpecificVolumeConfig.solid_value,
-                    config.GenerateSpecificVolumeConfig.pore_value).astype(np.uint8)
+    return np.where(solid2, config.solid_value,
+                    config.pore_value).astype(np.uint8)
 
 
 # ============================================================
@@ -1019,6 +1022,7 @@ def make_error_dict(
 
 
 def compute_weighted_score(
+        cfg: config.GenerateSpecificVolumeConfig,
         error_dict: Dict[str, float],
         generated_metrics: Dict[str, float],
         weights: Dict[str, float],
@@ -1026,7 +1030,7 @@ def compute_weighted_score(
     score = 0.0
 
     for key, w in weights.items():
-        if config.GenerateSpecificVolumeConfig.use_std_normalized_error:
+        if cfg.use_std_normalized_error:
             e = float(error_dict[f"{key}_std_normalized_error"])
         else:
             e = float(error_dict[f"{key}_rel_error"])
@@ -1035,20 +1039,22 @@ def compute_weighted_score(
 
     solid_num = int(generated_metrics.get("solid_component_count", 0))
 
-    if solid_num < config.GenerateSpecificVolumeConfig.min_solid_component_count_soft:
-        score += config.GenerateSpecificVolumeConfig.topology_penalty_weight * float(
-            config.GenerateSpecificVolumeConfig.min_solid_component_count_soft - solid_num)
+    if solid_num < cfg.min_solid_component_count_soft:
+        score += cfg.topology_penalty_weight * float(
+            cfg.min_solid_component_count_soft - solid_num)
 
     return float(score)
 
 
 def generate_best_patch_from_condition(
+        cfg: config.GenerateSpecificVolumeConfig,
         model_condition: Dict[str, float],
         summary: Dict,
         ldm_model,
         vae_model,
         num_samples: int,
         save_patch_dir: str | None = None,
+        log_fn=None,
 ) -> Dict:
     """
     根据一个 patch 的 4 维模型条件生成多个候选，并选择最优候选。
@@ -1057,7 +1063,7 @@ def generate_best_patch_from_condition(
         cheap 阶段：porosity
         exact 阶段：porosity + tau_z + deff_z
     """
-    cond_norm_np = normalize_condition(model_condition, summary)
+    cond_norm_np = normalize_condition(model_condition, summary, cfg=cfg, log_fn=log_fn)
 
     device = next(ldm_model.parameters()).device
     cond_norm_all = torch.from_numpy(cond_norm_np).unsqueeze(0).repeat(num_samples, 1).to(device)
@@ -1071,28 +1077,28 @@ def generate_best_patch_from_condition(
 
         prob_volume = decode_one_prob_volume(ldm_model, vae_model, cond_i)
 
-        if config.GenerateSpecificVolumeConfig.use_adaptive_threshold_for_porosity:
+        if cfg.use_adaptive_threshold_for_porosity:
             threshold_base, _ = find_threshold_for_target_porosity(
                 prob_volume=prob_volume,
                 target_porosity=float(model_condition["porosity"]),
-                max_iters=config.GenerateSpecificVolumeConfig.adaptive_threshold_max_iters,
-                tol=config.GenerateSpecificVolumeConfig.adaptive_threshold_tol,
+                max_iters=cfg.adaptive_threshold_max_iters,
+                tol=cfg.adaptive_threshold_tol,
             )
         else:
             threshold_base = 0.5
 
         coarse_pool = []
 
-        for offset in config.GenerateSpecificVolumeConfig.threshold_offsets:
+        for offset in cfg.threshold_offsets:
             t_used = float(np.clip(threshold_base + offset, 0.0, 1.0))
             bin_raw = threshold_prob_volume(prob_volume, t_used)
 
-            for pp_cfg in config.GenerateSpecificVolumeConfig.postprocess_configs:
+            for pp_cfg in cfg.postprocess_configs:
                 bin_post = postprocess_solid_topology(bin_raw, pp_cfg)
 
-                if config.GenerateSpecificVolumeConfig.remove_small_pore_components:
+                if cfg.remove_small_pore_components:
                     bin_final = remove_small_pore_components(bin_post,
-                                                             config.GenerateSpecificVolumeConfig.min_pore_component_size)
+                                                             cfg.min_pore_component_size, cfg=cfg)
                 else:
                     bin_final = bin_post.copy()
 
@@ -1106,9 +1112,10 @@ def generate_best_patch_from_condition(
                 )
 
                 cheap_score = compute_weighted_score(
+                    cfg=cfg,
                     error_dict=cheap_error_dict,
                     generated_metrics=cheap_metrics,
-                    weights=config.GenerateSpecificVolumeConfig.cheap_error_weights,
+                    weights=cfg.cheap_error_weights,
                 )
 
                 coarse_pool.append({
@@ -1127,12 +1134,12 @@ def generate_best_patch_from_condition(
                 })
 
         coarse_pool = sorted(coarse_pool, key=lambda x: x["cheap_score"])
-        exact_pool = coarse_pool[:config.GenerateSpecificVolumeConfig.exact_eval_topk_per_candidate]
+        exact_pool = coarse_pool[:cfg.exact_eval_topk_per_candidate]
 
         candidate_best = None
 
         for item in exact_pool:
-            final_metrics = compute_generated_metrics_exact(item["bin_volume_final"])
+            final_metrics = compute_generated_metrics_exact(item["bin_volume_final"], cfg=cfg,)
 
             final_error_dict = make_error_dict(
                 target_condition=model_condition,
@@ -1142,9 +1149,10 @@ def generate_best_patch_from_condition(
             )
 
             total_score = compute_weighted_score(
+                cfg=cfg,
                 error_dict=final_error_dict,
                 generated_metrics=final_metrics,
-                weights=config.GenerateSpecificVolumeConfig.final_error_weights,
+                weights=cfg.final_error_weights,
             )
 
             result = dict(item)
@@ -1169,7 +1177,7 @@ def generate_best_patch_from_condition(
                 "best_final_metrics": candidate_best["final_metrics"],
             })
 
-        print(
+        log_fn(
             f"    candidate {i + 1}/{num_samples}: "
             f"current best score = {best_result['total_weighted_score']:.6f}"
         )
@@ -1271,6 +1279,7 @@ def assemble_prob_patches(
 # ============================================================
 
 def select_best_assembled_binary(
+        cfg: config.GenerateSpecificVolumeConfig,
         assembled_prob: np.ndarray,
         target_condition_large: Dict[str, float],
         summary: Dict,
@@ -1283,12 +1292,12 @@ def select_best_assembled_binary(
     """
     target_porosity_large = float(target_condition_large["porosity"])
 
-    if config.GenerateSpecificVolumeConfig.use_adaptive_threshold_for_porosity:
+    if cfg.use_adaptive_threshold_for_porosity:
         threshold_base, _ = find_threshold_for_target_porosity(
             prob_volume=assembled_prob,
             target_porosity=target_porosity_large,
-            max_iters=config.GenerateSpecificVolumeConfig.adaptive_threshold_max_iters,
-            tol=config.GenerateSpecificVolumeConfig.adaptive_threshold_tol,
+            max_iters=cfg.adaptive_threshold_max_iters,
+            tol=cfg.adaptive_threshold_tol,
         )
     else:
         threshold_base = 0.5
@@ -1296,20 +1305,20 @@ def select_best_assembled_binary(
     best = None
     all_candidate_summaries = []
 
-    for offset in config.GenerateSpecificVolumeConfig.threshold_offsets:
+    for offset in cfg.threshold_offsets:
         t_used = float(np.clip(threshold_base + offset, 0.0, 1.0))
         bin_raw = threshold_prob_volume(assembled_prob, t_used)
 
-        for pp_cfg in config.GenerateSpecificVolumeConfig.postprocess_configs:
+        for pp_cfg in cfg.postprocess_configs:
             bin_post = postprocess_solid_topology(bin_raw, pp_cfg)
 
-            if config.GenerateSpecificVolumeConfig.remove_small_pore_components:
+            if cfg.remove_small_pore_components:
                 bin_final = remove_small_pore_components(bin_post,
-                                                         config.GenerateSpecificVolumeConfig.min_pore_component_size)
+                                                         cfg.min_pore_component_size, cfg=cfg)
             else:
                 bin_final = bin_post.copy()
 
-            final_metrics = compute_generated_metrics_exact(bin_final)
+            final_metrics = compute_generated_metrics_exact(bin_final, cfg=cfg)
 
             final_error_dict = make_error_dict(
                 target_condition=target_condition_large,
@@ -1319,9 +1328,10 @@ def select_best_assembled_binary(
             )
 
             total_score = compute_weighted_score(
+                cfg=cfg,
                 error_dict=final_error_dict,
                 generated_metrics=final_metrics,
-                weights=config.GenerateSpecificVolumeConfig.final_error_weights,
+                weights=cfg.final_error_weights,
             )
 
             item = {
@@ -1361,7 +1371,7 @@ def select_best_assembled_binary(
 # ============================================================
 
 def generate_specific_volume_service(
-        config: config.GenerateSpecificVolumeConfig,
+        cfg: config.GenerateSpecificVolumeConfig,
         task_id: str,
         external_logger=None,
 ) -> Dict[str, Any]:
@@ -1369,7 +1379,7 @@ def generate_specific_volume_service(
     # logger
     # =========================================================
 
-    ensure_dir(config.out_dir)
+    ensure_dir(cfg.out_dir)
 
     # =========================================================
     # logs
@@ -1394,10 +1404,10 @@ def generate_specific_volume_service(
     # derived runtime params
     # =========================================================
 
-    stride = config.stride
+    stride = cfg.stride
 
     patch_root = os.path.join(
-        config.out_dir,
+        cfg.out_dir,
         "generated_patches"
     )
 
@@ -1410,13 +1420,14 @@ def generate_specific_volume_service(
     log("Loading dataset summary...")
 
     summary = load_json(
-        config.summary_json_path
+        cfg.summary_json_path
     )
 
     log("Loading training metrics table...")
 
     training_metrics = load_training_metrics_table(
-        config.train_metrics_table_path
+        cfg.train_metrics_table_path,
+        log_fn=log,
     )
 
     # =========================================================
@@ -1429,11 +1440,12 @@ def generate_specific_volume_service(
         build_user_local_conditions(
             summary=summary,
             training_metrics=training_metrics,
+            cfg=cfg,
         )
     )
 
     user_local_conditions_path = os.path.join(
-        config.out_dir,
+        cfg.out_dir,
         "user_local_conditions.json"
     )
 
@@ -1450,12 +1462,12 @@ def generate_specific_volume_service(
 
     log(
         f"condition_input_mode = "
-        f"{config.condition_input_mode}"
+        f"{cfg.condition_input_mode}"
     )
 
     log(
         f"grid_shape_yzx = "
-        f"{config.grid_shape}"
+        f"{cfg.grid_shape}"
     )
 
     log(
@@ -1465,12 +1477,12 @@ def generate_specific_volume_service(
 
     log(
         f"patch_size = "
-        f"{config.patch_size}"
+        f"{cfg.patch_size}"
     )
 
     log(
         f"overlap = "
-        f"{config.overlap}"
+        f"{cfg.overlap}"
     )
 
     log(
@@ -1485,12 +1497,12 @@ def generate_specific_volume_service(
 
     log(
         f"auto_surface_mode = "
-        f"{config.auto_surface_mode}"
+        f"{cfg.auto_surface_mode}"
     )
 
     log(
         f"auto_deff_mode = "
-        f"{config.auto_deff_mode}"
+        f"{cfg.auto_deff_mode}"
     )
 
     log(
@@ -1500,7 +1512,7 @@ def generate_specific_volume_service(
 
     log(
         f"save_all_y_zx_slice_png = "
-        f"{config.save_all_y_zx_slice_png}"
+        f"{cfg.save_all_y_zx_slice_png}"
     )
 
     # =========================================================
@@ -1508,9 +1520,9 @@ def generate_specific_volume_service(
     # =========================================================
 
     device = torch.device(
-        config.device
+        cfg.device
         if (
-                config.device == "cpu"
+                cfg.device == "cpu"
                 or torch.cuda.is_available()
         )
         else "cpu"
@@ -1525,14 +1537,14 @@ def generate_specific_volume_service(
     log("Loading LDM model...")
 
     ldm_model = load_ldm_model(
-        config.ldm_ckpt_path,
+        cfg.ldm_ckpt_path,
         device,
     )
 
     log("Loading VAE model...")
 
     vae_model = load_vae_model(
-        config.vae_ckpt_path,
+        cfg.vae_ckpt_path,
         device,
     )
 
@@ -1592,14 +1604,13 @@ def generate_specific_volume_service(
 
         best_patch = (
             generate_best_patch_from_condition(
-                config=config,
+                cfg=cfg,
                 model_condition=model_condition,
                 summary=summary,
                 ldm_model=ldm_model,
                 vae_model=vae_model,
-                num_samples=config.num_samples_per_patch,
+                num_samples=cfg.num_samples_per_patch,
                 save_patch_dir=patch_dir,
-                logger=logger,
             )
         )
 
@@ -1654,9 +1665,9 @@ def generate_specific_volume_service(
 
     assembled_prob = assemble_prob_patches(
         prob_patches=prob_patches,
-        patch_size=config.patch_size,
+        patch_size=cfg.patch_size,
         stride=stride,
-        grid_shape=config.grid_shape,
+        grid_shape=cfg.grid_shape,
     )
 
     shape_str = (
@@ -1671,11 +1682,10 @@ def generate_specific_volume_service(
 
     best_assembly = (
         select_best_assembled_binary(
-            config=config,
+            cfg=cfg,
             assembled_prob=assembled_prob,
             target_condition_large=target_condition_large,
             summary=summary,
-            logger=logger,
         )
     )
 
@@ -1691,27 +1701,27 @@ def generate_specific_volume_service(
     log("Saving NPY results...")
 
     assembled_prob_path = os.path.join(
-        config.out_dir,
+        cfg.out_dir,
         f"assembled_prob_{shape_str}.npy"
     )
 
     assembled_bin_raw_path = os.path.join(
-        config.out_dir,
+        cfg.out_dir,
         f"assembled_bin_raw_{shape_str}.npy"
     )
 
     assembled_bin_post_path = os.path.join(
-        config.out_dir,
+        cfg.out_dir,
         f"assembled_bin_postprocess_{shape_str}.npy"
     )
 
     assembled_bin_final_path = os.path.join(
-        config.out_dir,
+        cfg.out_dir,
         f"assembled_bin_final_{shape_str}.npy"
     )
 
     twin_final_path = os.path.join(
-        config.out_dir,
+        cfg.out_dir,
         "twin_AM_pore_final.npy"
     )
 
@@ -1746,16 +1756,17 @@ def generate_specific_volume_service(
 
     slice_output_paths = {}
 
-    if config.save_all_y_zx_slice_png:
+    if cfg.save_all_y_zx_slice_png:
         log(
             "Saving Y-direction ZX slice PNGs..."
         )
 
         slice_output_paths.update(
             save_all_y_zx_slice_pngs(
-                config=config,
+                cfg=cfg,
                 volume_yzx=final_volume,
-                out_root=config.out_dir,
+                out_root=cfg.out_dir,
+                log_fn=log,
             )
         )
 
@@ -1773,7 +1784,7 @@ def generate_specific_volume_service(
             "generate_specific_volume_service",
 
         "config":
-            asdict(config),
+            asdict(cfg),
 
         "assembled_shape_yzx":
             list(assembled_prob.shape),
@@ -1842,7 +1853,7 @@ def generate_specific_volume_service(
     }
 
     assembly_summary_path = os.path.join(
-        config.out_dir,
+        cfg.out_dir,
         "assembly_summary.json"
     )
 
@@ -1863,7 +1874,7 @@ def generate_specific_volume_service(
 
     log(
         f"Output directory: "
-        f"{config.out_dir}"
+        f"{cfg.out_dir}"
     )
 
     log(
@@ -1891,7 +1902,7 @@ def generate_specific_volume_service(
         f"{twin_final_path}"
     )
 
-    if config.save_all_y_zx_slice_png:
+    if cfg.save_all_y_zx_slice_png:
         log(
             f"ZX slice PNG directory: "
             f"{slice_output_paths.get('all_y_zx_slice_png_dir', '')}"
@@ -1913,7 +1924,7 @@ def generate_specific_volume_service(
             "generate_specific_volume_service success",
 
         "out_dir":
-            config.out_dir,
+            cfg.out_dir,
 
         "assembly_summary_path":
             assembly_summary_path,

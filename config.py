@@ -29,6 +29,8 @@ class GenerateSpecificVolumeConfig:
 
     overlap: int = 32
 
+    stride: int = 96
+
     grid_shape: Tuple[int, int, int] = (2, 2, 2)
 
     # =========================================================
@@ -231,11 +233,3 @@ class GenerateSpecificVolumeConfig:
     save_generated_patch_intermediate: bool = True
 
     save_assembled_intermediate: bool = True
-
-    # =========================================================
-    # 20. derived property
-    # =========================================================
-
-    @property
-    def stride(self) -> int:
-        return self.patch_size - self.overlap

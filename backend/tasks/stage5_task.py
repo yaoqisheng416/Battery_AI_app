@@ -400,6 +400,11 @@ def merge_request_to_config(
     def pick(req_value, cfg_value):
         return cfg_value if req_value is None else req_value
 
+    # 算好 stride
+    patch_size = pick(request.patch_size, 128)
+    overlap = pick(request.overlap, 32)
+    stride = patch_size - overlap
+
     return GenerateSpecificVolumeConfig(
 
         # paths（必须传）
@@ -415,6 +420,7 @@ def merge_request_to_config(
         # patch
         patch_size=pick(request.patch_size, 128),
         overlap=pick(request.overlap, 32),
+        stride=stride,
         grid_shape=pick(request.grid_shape, (2, 2, 2)),
 
         # condition
@@ -487,7 +493,7 @@ def run_generate_specific_volume_task(task_id, request):
         config = merge_request_to_config(request)
 
         result = generate_specific_volume_service(
-            config=config,
+            cfg=config,
             task_id=task_id,
             external_logger=web_log,
         )
