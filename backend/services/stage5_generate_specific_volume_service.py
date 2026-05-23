@@ -515,7 +515,7 @@ def is_percolating_along_z(volume: np.ndarray, cfg: config.GenerateSpecificVolum
 
 
 def compute_tau_deff_z(volume: np.ndarray, cfg: config.GenerateSpecificVolumeConfig,) -> tuple[float, float, int]:
-    percolating = is_percolating_along_z(volume)
+    percolating = is_percolating_along_z(volume, cfg=cfg)
 
     if not percolating:
         return float(cfg.tau_nonperc_value), 0.0, 0
@@ -553,7 +553,7 @@ def compute_generated_metrics_cheap(bin_volume: np.ndarray, cfg: config.Generate
 
 
 def compute_generated_metrics_exact(bin_volume: np.ndarray, cfg: config.GenerateSpecificVolumeConfig,) -> Dict[str, float]:
-    cheap = compute_generated_metrics_cheap(bin_volume)
+    cheap = compute_generated_metrics_cheap(bin_volume, cfg=cfg)
     tau_z, deff_z, is_perc = compute_tau_deff_z(bin_volume, cfg=cfg,)
 
     out = dict(cheap)
@@ -820,6 +820,7 @@ def normalize_condition(cond_raw: Dict[str, float], summary: Dict, cfg: config.G
 # ============================================================
 
 def find_threshold_for_target_porosity(
+        cfg: config.GenerateSpecificVolumeConfig,
         prob_volume: np.ndarray,
         target_porosity: float,
         max_iters: int = 25,
@@ -840,7 +841,7 @@ def find_threshold_for_target_porosity(
     for _ in range(max_iters):
         mid = 0.5 * (lo + hi)
         bin_volume = (prob_volume >= mid).astype(np.uint8)
-        por = porosity(bin_volume)
+        por = porosity(bin_volume, cfg=cfg)
 
         err = abs(por - target_porosity)
 
@@ -865,10 +866,10 @@ def threshold_prob_volume(prob_volume: np.ndarray, threshold: float) -> np.ndarr
     return (prob_volume >= threshold).astype(np.uint8)
 
 
-def postprocess_solid_topology(bin_volume: np.ndarray, cfg: Dict) -> np.ndarray:
+def postprocess_solid_topology(bin_volume: np.ndarray, cfg: Dict, conf: config.GenerateSpecificVolumeConfig,) -> np.ndarray:
     mode = cfg["mode"]
 
-    solid = (bin_volume == config.solid_value)
+    solid = (bin_volume == conf.solid_value)
 
     if mode == "none":
         solid2 = solid
@@ -890,8 +891,8 @@ def postprocess_solid_topology(bin_volume: np.ndarray, cfg: Dict) -> np.ndarray:
     else:
         raise ValueError(f"未知后处理模式: {mode}")
 
-    return np.where(solid2, config.solid_value,
-                    config.pore_value).astype(np.uint8)
+    return np.where(solid2, conf.solid_value,
+                    conf.pore_value).astype(np.uint8)
 
 
 # ============================================================
@@ -1079,6 +1080,7 @@ def generate_best_patch_from_condition(
 
         if cfg.use_adaptive_threshold_for_porosity:
             threshold_base, _ = find_threshold_for_target_porosity(
+                cfg=cfg,
                 prob_volume=prob_volume,
                 target_porosity=float(model_condition["porosity"]),
                 max_iters=cfg.adaptive_threshold_max_iters,
@@ -1094,7 +1096,7 @@ def generate_best_patch_from_condition(
             bin_raw = threshold_prob_volume(prob_volume, t_used)
 
             for pp_cfg in cfg.postprocess_configs:
-                bin_post = postprocess_solid_topology(bin_raw, pp_cfg)
+                bin_post = postprocess_solid_topology(bin_raw, pp_cfg, conf=cfg)
 
                 if cfg.remove_small_pore_components:
                     bin_final = remove_small_pore_components(bin_post,
@@ -1102,7 +1104,7 @@ def generate_best_patch_from_condition(
                 else:
                     bin_final = bin_post.copy()
 
-                cheap_metrics = compute_generated_metrics_cheap(bin_final)
+                cheap_metrics = compute_generated_metrics_cheap(bin_final, cfg=cfg)
 
                 cheap_error_dict = make_error_dict(
                     target_condition=model_condition,
@@ -1294,6 +1296,7 @@ def select_best_assembled_binary(
 
     if cfg.use_adaptive_threshold_for_porosity:
         threshold_base, _ = find_threshold_for_target_porosity(
+            cfg=cfg,
             prob_volume=assembled_prob,
             target_porosity=target_porosity_large,
             max_iters=cfg.adaptive_threshold_max_iters,
@@ -1310,7 +1313,7 @@ def select_best_assembled_binary(
         bin_raw = threshold_prob_volume(assembled_prob, t_used)
 
         for pp_cfg in cfg.postprocess_configs:
-            bin_post = postprocess_solid_topology(bin_raw, pp_cfg)
+            bin_post = postprocess_solid_topology(bin_raw, pp_cfg, conf=cfg)
 
             if cfg.remove_small_pore_components:
                 bin_final = remove_small_pore_components(bin_post,
@@ -1458,60 +1461,60 @@ def generate_specific_volume_service(
     # print config summary
     # =========================================================
 
-    log("User generation config:")
+    log("用户生成配置:")
 
     log(
-        f"condition_input_mode = "
+        f"CONDITION_INPUT_MODE = "
         f"{cfg.condition_input_mode}"
     )
 
     log(
-        f"grid_shape_yzx = "
+        f"GRID_SHAPE [Y,Z,X]  = "
         f"{cfg.grid_shape}"
     )
 
     log(
-        f"num_patches = "
+        f"patch 数量   = "
         f"{len(local_conditions)}"
     )
 
     log(
-        f"patch_size = "
+        f"PATCH_SIZE = "
         f"{cfg.patch_size}"
     )
 
     log(
-        f"overlap = "
+        f"OVERLAP = "
         f"{cfg.overlap}"
     )
 
     log(
-        f"stride = "
+        f"STRIDE = "
         f"{stride}"
     )
 
     log(
-        f"assembled_shape_yzx = "
+        f"输出体积 shape [Y,Z,X = "
         f"{tuple(user_condition_info['assembled_shape_yzx'])}"
     )
-
+    log(f"用户输入指标    = porosity + tau_z")
     log(
-        f"auto_surface_mode = "
+        f"surface_area 补全方式  = "
         f"{cfg.auto_surface_mode}"
     )
 
     log(
-        f"auto_deff_mode = "
+        f"deff_z 补全方式  = "
         f"{cfg.auto_deff_mode}"
     )
 
     log(
-        f"target_global_condition = "
+        f"target global condition = "
         f"{user_condition_info['target_global_condition']}"
     )
 
     log(
-        f"save_all_y_zx_slice_png = "
+        f"沿 Y 方向 ZX 截面 PNG 输出 = "
         f"{cfg.save_all_y_zx_slice_png}"
     )
 
@@ -1611,6 +1614,7 @@ def generate_specific_volume_service(
                 vae_model=vae_model,
                 num_samples=cfg.num_samples_per_patch,
                 save_patch_dir=patch_dir,
+                log_fn=log,
             )
         )
 
@@ -1898,13 +1902,13 @@ def generate_specific_volume_service(
     )
 
     log(
-        f"Final twin volume: "
+        f"最终 AM-pore 数字孪生体: "
         f"{twin_final_path}"
     )
 
     if cfg.save_all_y_zx_slice_png:
         log(
-            f"ZX slice PNG directory: "
+            f"最终沿 Y 方向全部 ZX 截面 PNG 已输出到: "
             f"{slice_output_paths.get('all_y_zx_slice_png_dir', '')}"
         )
 

@@ -106,19 +106,19 @@ class Stage5Page(QWidget):
         # tip
         # =====================================================
         tip = QLabel(
-            "根据用户指定 porosity / tau_z 条件，自动生成 224³ AM-pore twin volume"
+            "💡 根据用户输入的孔隙率 + 迂曲度条件，生成并拼接大体积 AM-pore 数字孪生结构, 并保存最终体数据沿 Y 方向的全部 ZX 切片可视化图"
         )
 
         tip.setWordWrap(True)
 
         tip.setStyleSheet("""
-            QLabel{
-                background:#25262b;
-                border:1px solid #4f8cff;
-                border-radius:8px;
-                padding:12px;
-                color:#4f8cff;
-                font-size:12px;
+            QLabel {
+                font-size: 12px;
+                color: #4f8cff;
+                padding: 15px;
+                background: #25262b;
+                border-radius: 10px;
+                border: 2px solid #4f8cff;
             }
         """)
 
@@ -691,6 +691,12 @@ class Stage5Page(QWidget):
                     "name": "open1",
                     "mode": "open",
                     "iters": 1,
+                },
+                {
+                    "name": "erode1_dilate1",
+                    "mode": "erode_dilate",
+                    "erode_iters": 1,
+                    "dilate_iters": 1,
                 },
             ], indent=2)
         )
@@ -1268,6 +1274,9 @@ class Stage5Page(QWidget):
 
             "min_pore_component_size":
                 self.min_pore_spin.value(),
+
+            "postprocess_configs":
+                postprocess_configs,
 
             # =================================================
             # threshold
