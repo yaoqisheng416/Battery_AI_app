@@ -199,10 +199,10 @@ class Stage6Page(QWidget):
         self.w_um.setValue(0.08)
         self.w_um.setMinimumWidth(150)
 
-        cbd_layout.addWidget(QLabel("Target CBD:"))
+        cbd_layout.addWidget(QLabel("target volume fraction:"))
         cbd_layout.addWidget(self.target_cbd)
         cbd_layout.addStretch()
-        cbd_layout.addWidget(QLabel("W Parameter:"))
+        cbd_layout.addWidget(QLabel("W parameter（CBD特征铺展长度（μm)）:"))
         cbd_layout.addWidget(self.w_um)
 
         layout.addWidget(cbd_group)
@@ -210,36 +210,36 @@ class Stage6Page(QWidget):
         # ====================================================
         # 相标签（水平排列 + 强制范围）
         # ====================================================
-        phase_group = QGroupBox("相标签")
-        phase_layout = QHBoxLayout(phase_group)
-        phase_layout.setSpacing(15)
-
-        self.pore_value = QSpinBox()
-        self.pore_value.setRange(0, 999999)  # 强制范围
-        self.pore_value.setSingleStep(1)  # 每次增减 1
-        self.pore_value.setMinimumWidth(100)
-
-        self.am_value = QSpinBox()
-        self.am_value.setRange(0, 999999)  # 强制范围
-        self.am_value.setSingleStep(1)
-        self.am_value.setValue(1)
-        self.am_value.setMinimumWidth(100)
-
-        self.cbd_value = QSpinBox()
-        self.cbd_value.setRange(0, 999999)  # 强制范围
-        self.cbd_value.setSingleStep(1)
-        self.cbd_value.setValue(2)
-        self.cbd_value.setMinimumWidth(100)
-
-        phase_layout.addWidget(QLabel("Pore:"))
-        phase_layout.addWidget(self.pore_value)
-        phase_layout.addWidget(QLabel("AM:"))
-        phase_layout.addWidget(self.am_value)
-        phase_layout.addWidget(QLabel("CBD:"))
-        phase_layout.addWidget(self.cbd_value)
-        phase_layout.addStretch()
-
-        layout.addWidget(phase_group)
+        # phase_group = QGroupBox("相标签")
+        # phase_layout = QHBoxLayout(phase_group)
+        # phase_layout.setSpacing(15)
+        #
+        # self.pore_value = QSpinBox()
+        # self.pore_value.setRange(0, 999999)  # 强制范围
+        # self.pore_value.setSingleStep(1)  # 每次增减 1
+        # self.pore_value.setMinimumWidth(100)
+        #
+        # self.am_value = QSpinBox()
+        # self.am_value.setRange(0, 999999)  # 强制范围
+        # self.am_value.setSingleStep(1)
+        # self.am_value.setValue(1)
+        # self.am_value.setMinimumWidth(100)
+        #
+        # self.cbd_value = QSpinBox()
+        # self.cbd_value.setRange(0, 999999)  # 强制范围
+        # self.cbd_value.setSingleStep(1)
+        # self.cbd_value.setValue(2)
+        # self.cbd_value.setMinimumWidth(100)
+        #
+        # phase_layout.addWidget(QLabel("Pore:"))
+        # phase_layout.addWidget(self.pore_value)
+        # phase_layout.addWidget(QLabel("AM:"))
+        # phase_layout.addWidget(self.am_value)
+        # phase_layout.addWidget(QLabel("CBD:"))
+        # phase_layout.addWidget(self.cbd_value)
+        # phase_layout.addStretch()
+        #
+        # layout.addWidget(phase_group)
 
         # ====================================================
         # Voxel Size（水平排列 + 强制范围）
@@ -293,19 +293,19 @@ class Stage6Page(QWidget):
         self.max_growth.setValue(4.0)
         self.max_growth.setMinimumWidth(120)
 
-        self.seed = QSpinBox()
-        self.seed.setRange(0, 999999)  #  强制范围
-        self.seed.setSingleStep(1)
-        self.seed.setValue(42)
-        self.seed.setMinimumWidth(120)
+        # self.seed = QSpinBox()
+        # self.seed.setRange(0, 999999)  #  强制范围
+        # self.seed.setSingleStep(1)
+        # self.seed.setValue(42)
+        # self.seed.setMinimumWidth(120)
 
         self.remove_isolated = QCheckBox("Remove Isolated CBD")
         self.remove_isolated.setChecked(True)
 
         adv_layout.addWidget(QLabel("Max Growth:"))
         adv_layout.addWidget(self.max_growth)
-        adv_layout.addWidget(QLabel("Seed:"))
-        adv_layout.addWidget(self.seed)
+        # adv_layout.addWidget(QLabel("Seed:"))
+        # adv_layout.addWidget(self.seed)
         adv_layout.addStretch()
         adv_layout.addWidget(self.remove_isolated)
 
@@ -364,15 +364,15 @@ class Stage6Page(QWidget):
             "input_volume_path": self.input_file,
             "target_cbd_vol_frac": self.target_cbd.value(),
             "w_um": self.w_um.value(),
-            "pore_value": self.pore_value.value(),
-            "am_value": self.am_value.value(),
-            "cbd_value": self.cbd_value.value(),
+            "pore_value": 0,
+            "am_value": 1,
+            "cbd_value": 2,
             "voxel_size_x": self.voxel_x.value(),
             "voxel_size_y": self.voxel_y.value(),
             "voxel_size_z": self.voxel_z.value(),
             "max_growth_distance_factor": self.max_growth.value(),
             "remove_isolated_cbd": self.remove_isolated.isChecked(),
-            "seed": self.seed.value(),
+            "seed": 42,
         }
 
         result = create_task(
@@ -413,6 +413,7 @@ class Stage6Page(QWidget):
         # 5. 跳转到任务中心（无论点 OK 还是「前往任务中心」按钮）
         if ret == QMessageBox.Ok or msg.clickedButton() == go_btn:
             self.main_window.menu.setCurrentRow(5)  # 「历史任务中心」是第 6 个（索引 5）
+            self.main_window.history_page.refresh_task_list()
 
     def reset_generate_params(self):
         """恢复所有参数为默认值"""
@@ -436,7 +437,7 @@ class Stage6Page(QWidget):
 
         #  恢复高级参数
         self.max_growth.setValue(4.0)
-        self.seed.setValue(42)
+        # self.seed.setValue(42)
         self.remove_isolated.setChecked(True)
 
         #  提示
@@ -504,37 +505,37 @@ class Stage6Page(QWidget):
         # ====================================================
         # 相标签（水平排列）
         # ====================================================
-        phase_group = QGroupBox("相标签定义")
-        phase_layout = QHBoxLayout(phase_group)
-        phase_layout.setSpacing(15)
-
-        self.fit_pore = QSpinBox()
-        self.fit_pore.setRange(0, 999999)
-        self.fit_pore.setSingleStep(1)
-        self.fit_pore.setValue(0)
-        self.fit_pore.setMinimumWidth(100)
-
-        self.fit_am = QSpinBox()
-        self.fit_am.setRange(0, 999999)
-        self.fit_am.setSingleStep(1)
-        self.fit_am.setValue(1)
-        self.fit_am.setMinimumWidth(100)
-
-        self.fit_cbd = QSpinBox()
-        self.fit_cbd.setRange(0, 999999)
-        self.fit_cbd.setSingleStep(1)
-        self.fit_cbd.setValue(2)
-        self.fit_cbd.setMinimumWidth(100)
-
-        phase_layout.addWidget(QLabel("Pore:"))
-        phase_layout.addWidget(self.fit_pore)
-        phase_layout.addWidget(QLabel("AM:"))
-        phase_layout.addWidget(self.fit_am)
-        phase_layout.addWidget(QLabel("CBD:"))
-        phase_layout.addWidget(self.fit_cbd)
-        phase_layout.addStretch()
-
-        layout.addWidget(phase_group)
+        # phase_group = QGroupBox("相标签定义")
+        # phase_layout = QHBoxLayout(phase_group)
+        # phase_layout.setSpacing(15)
+        #
+        # self.fit_pore = QSpinBox()
+        # self.fit_pore.setRange(0, 999999)
+        # self.fit_pore.setSingleStep(1)
+        # self.fit_pore.setValue(0)
+        # self.fit_pore.setMinimumWidth(100)
+        #
+        # self.fit_am = QSpinBox()
+        # self.fit_am.setRange(0, 999999)
+        # self.fit_am.setSingleStep(1)
+        # self.fit_am.setValue(1)
+        # self.fit_am.setMinimumWidth(100)
+        #
+        # self.fit_cbd = QSpinBox()
+        # self.fit_cbd.setRange(0, 999999)
+        # self.fit_cbd.setSingleStep(1)
+        # self.fit_cbd.setValue(2)
+        # self.fit_cbd.setMinimumWidth(100)
+        #
+        # phase_layout.addWidget(QLabel("Pore:"))
+        # phase_layout.addWidget(self.fit_pore)
+        # phase_layout.addWidget(QLabel("AM:"))
+        # phase_layout.addWidget(self.fit_am)
+        # phase_layout.addWidget(QLabel("CBD:"))
+        # phase_layout.addWidget(self.fit_cbd)
+        # phase_layout.addStretch()
+        #
+        # layout.addWidget(phase_group)
 
         # ====================================================
         # W扫描参数（水平排列）
@@ -625,11 +626,11 @@ class Stage6Page(QWidget):
         self.fit_growth.setValue(4.0)
         self.fit_growth.setMinimumWidth(120)
 
-        self.fit_seed = QSpinBox()
-        self.fit_seed.setRange(0, 999999)
-        self.fit_seed.setSingleStep(1)
-        self.fit_seed.setValue(42)
-        self.fit_seed.setMinimumWidth(120)
+        # self.fit_seed = QSpinBox()
+        # self.fit_seed.setRange(0, 999999)
+        # self.fit_seed.setSingleStep(1)
+        # self.fit_seed.setValue(42)
+        # self.fit_seed.setMinimumWidth(120)
 
         self.fit_remove = QCheckBox("Remove Isolated CBD")
         self.fit_remove.setChecked(True)
@@ -637,7 +638,7 @@ class Stage6Page(QWidget):
         adv_layout.addWidget(QLabel("Max Growth:"))
         adv_layout.addWidget(self.fit_growth)
         adv_layout.addWidget(QLabel("Seed:"))
-        adv_layout.addWidget(self.fit_seed)
+        # adv_layout.addWidget(self.fit_seed)
         adv_layout.addStretch()
         adv_layout.addWidget(self.fit_remove)
 
@@ -780,9 +781,9 @@ class Stage6Page(QWidget):
         payload = {
             "real_3phase_slice_dir": self.real_dir_edit.text(),
             "out_dir": self.out_dir_edit.text(),
-            "pore_value": self.fit_pore.value(),
-            "am_value": self.fit_am.value(),
-            "cbd_value": self.fit_cbd.value(),
+            "pore_value": 0,
+            "am_value": 1,
+            "cbd_value": 2,
             "w_min": self.w_min.value(),
             "w_max": self.w_max.value(),
             "num_w": self.num_w.value(),
@@ -791,7 +792,7 @@ class Stage6Page(QWidget):
             "voxel_size_z": self.fit_voxel_z.value(),
             "max_growth_distance_factor": self.fit_growth.value(),
             "remove_isolated_cbd": self.fit_remove.isChecked(),
-            "seed": self.fit_seed.value(),
+            "seed": 42,
         }
 
         result = create_task(
@@ -833,6 +834,7 @@ class Stage6Page(QWidget):
         # 6. 跳转到任务中心（无论点 OK 还是「前往任务中心」按钮）
         if ret == QMessageBox.Ok or msg.clickedButton() == go_btn:
             self.main_window.menu.setCurrentRow(5)  # 「历史任务中心」是第 6 个（索引 5）
+            self.main_window.history_page.refresh_task_list()
 
     # ========================================================
     # refresh generate

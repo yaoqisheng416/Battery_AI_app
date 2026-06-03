@@ -52,9 +52,9 @@ class Stage5Page(QWidget):
 
         self.manual_patch_widgets = []
 
-        self.default_summary_json = resource_path(
-            "backend/electrode_twin/latent_dataset/dataset_summary.json"
-        )
+        # self.default_summary_json = resource_path(
+        #     "backend/electrode_twin/latent_dataset/dataset_summary.json"
+        # )
 
         self.default_metrics_csv = resource_path(
             "backend/electrode_twin/latent_dataset/train_metrics_table.csv"
@@ -147,7 +147,7 @@ class Stage5Page(QWidget):
         # =====================================================
         # threshold
         # =====================================================
-        self.build_threshold_group(layout)
+        # self.build_threshold_group(layout)
 
         # =====================================================
         # score
@@ -157,7 +157,7 @@ class Stage5Page(QWidget):
         # =====================================================
         # slice
         # =====================================================
-        self.build_slice_group(layout)
+        # self.build_slice_group(layout)
 
         # =====================================================
         # btn
@@ -298,28 +298,28 @@ class Stage5Page(QWidget):
         g_layout = QVBoxLayout(group)
 
         self.summary_json_edit = QLineEdit()
-        self.summary_json_edit.setText(
-            self.default_summary_json
-        )
+        # self.summary_json_edit.setText(
+        #     self.default_summary_json
+        # )
 
-        self.metrics_csv_edit = QLineEdit()
-        self.metrics_csv_edit.setText(
-            self.default_metrics_csv
-        )
+        # self.metrics_csv_edit = QLineEdit()
+        # self.metrics_csv_edit.setText(
+        #     self.default_metrics_csv
+        # )
 
         self.out_dir_edit = QLineEdit()
 
         btn_summary = QPushButton("选择")
-        btn_metrics = QPushButton("选择")
+        # btn_metrics = QPushButton("选择")
         btn_out = QPushButton("选择")
 
         btn_summary.clicked.connect(
             self.select_summary_json
         )
 
-        btn_metrics.clicked.connect(
-            self.select_metrics_csv
-        )
+        # btn_metrics.clicked.connect(
+        #     self.select_metrics_csv
+        # )
 
         btn_out.clicked.connect(
             self.select_out_dir
@@ -330,10 +330,10 @@ class Stage5Page(QWidget):
         row1.addWidget(self.summary_json_edit)
         row1.addWidget(btn_summary)
 
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("train_metrics_table"))
-        row2.addWidget(self.metrics_csv_edit)
-        row2.addWidget(btn_metrics)
+        # row2 = QHBoxLayout()
+        # row2.addWidget(QLabel("train_metrics_table"))
+        # row2.addWidget(self.metrics_csv_edit)
+        # row2.addWidget(btn_metrics)
 
         row3 = QHBoxLayout()
         row3.addWidget(QLabel("输出目录"))
@@ -341,7 +341,7 @@ class Stage5Page(QWidget):
         row3.addWidget(btn_out)
 
         g_layout.addLayout(row1)
-        g_layout.addLayout(row2)
+        # g_layout.addLayout(row2)
         g_layout.addLayout(row3)
 
         layout.addWidget(group)
@@ -508,15 +508,15 @@ class Stage5Page(QWidget):
         self.num_samples_spin.setMaximum(1024)
         self.num_samples_spin.setValue(32)
 
-        self.auto_surface_combo = QComboBox()
-        self.auto_surface_combo.addItems([
-            "nearest_training_porosity_tau"
-        ])
-
-        self.auto_deff_combo = QComboBox()
-        self.auto_deff_combo.addItems([
-            "porosity_over_tau"
-        ])
+        # self.auto_surface_combo = QComboBox()
+        # self.auto_surface_combo.addItems([
+        #     "nearest_training_porosity_tau"
+        # ])
+        #
+        # self.auto_deff_combo = QComboBox()
+        # self.auto_deff_combo.addItems([
+        #     "porosity_over_tau"
+        # ])
 
         self.pore_spin = QSpinBox()
         self.pore_spin.setValue(0)
@@ -573,17 +573,17 @@ class Stage5Page(QWidget):
             g_layout
         )
 
-        self.create_form_row(
-            "AUTO_SURFACE_MODE",
-            self.auto_surface_combo,
-            g_layout
-        )
-
-        self.create_form_row(
-            "AUTO_DEFF_MODE",
-            self.auto_deff_combo,
-            g_layout
-        )
+        # self.create_form_row(
+        #     "AUTO_SURFACE_MODE",
+        #     self.auto_surface_combo,
+        #     g_layout
+        # )
+        #
+        # self.create_form_row(
+        #     "AUTO_DEFF_MODE",
+        #     self.auto_deff_combo,
+        #     g_layout
+        # )
 
         self.create_form_row(
             "PORE_VALUE",
@@ -615,29 +615,29 @@ class Stage5Page(QWidget):
             g_layout
         )
 
-        self.create_form_row(
-            "REMOVE_SMALL_PORE_COMPONENTS",
-            self.remove_small_checkbox,
-            g_layout
-        )
-
-        self.create_form_row(
-            "MIN_PORE_COMPONENT_SIZE",
-            self.min_pore_spin,
-            g_layout
-        )
-
-        self.create_form_row(
-            "TAU_NONPERC_VALUE",
-            self.tau_nonperc_spin,
-            g_layout
-        )
-
-        self.create_form_row(
-            "SUPPRESS_TAUFACTOR_OUTPUT",
-            self.suppress_checkbox,
-            g_layout
-        )
+        # self.create_form_row(
+        #     "REMOVE_SMALL_PORE_COMPONENTS",
+        #     self.remove_small_checkbox,
+        #     g_layout
+        # )
+        #
+        # self.create_form_row(
+        #     "MIN_PORE_COMPONENT_SIZE",
+        #     self.min_pore_spin,
+        #     g_layout
+        # )
+        #
+        # self.create_form_row(
+        #     "TAU_NONPERC_VALUE",
+        #     self.tau_nonperc_spin,
+        #     g_layout
+        # )
+        #
+        # self.create_form_row(
+        #     "SUPPRESS_TAUFACTOR_OUTPUT",
+        #     self.suppress_checkbox,
+        #     g_layout
+        # )
 
         layout.addWidget(group)
 
@@ -1152,11 +1152,37 @@ class Stage5Page(QWidget):
         try:
 
             threshold_offsets = json.loads(
-                self.threshold_offsets_edit.toPlainText()
+                json.dumps(
+                    [-0.04, -0.03, -0.02, -0.01,
+                     0.0,
+                     0.01, 0.02, 0.03, 0.04],
+                    indent=2
+                )
             )
 
             postprocess_configs = json.loads(
-                self.postprocess_edit.toPlainText()
+                json.dumps([
+                    {
+                        "name": "raw",
+                        "mode": "none",
+                    },
+                    {
+                        "name": "erode1",
+                        "mode": "erode",
+                        "iters": 1,
+                    },
+                    {
+                        "name": "open1",
+                        "mode": "open",
+                        "iters": 1,
+                    },
+                    {
+                        "name": "erode1_dilate1",
+                        "mode": "erode_dilate",
+                        "erode_iters": 1,
+                        "dilate_iters": 1,
+                    },
+                ], indent=2)
             )
 
             cheap_weights = json.loads(
@@ -1186,7 +1212,7 @@ class Stage5Page(QWidget):
                 self.summary_json_edit.text(),
 
             "train_metrics_table_path":
-                self.metrics_csv_edit.text(),
+                self.default_metrics_csv,
 
             "ldm_ckpt_path":
                 self.selected_ldm_path,
@@ -1237,10 +1263,10 @@ class Stage5Page(QWidget):
             # auto
             # =================================================
             "auto_surface_mode":
-                self.auto_surface_combo.currentText(),
+                "nearest_training_porosity_tau",
 
             "auto_deff_mode":
-                self.auto_deff_combo.currentText(),
+                "porosity_over_tau",
 
             # =================================================
             # generation
@@ -1270,10 +1296,10 @@ class Stage5Page(QWidget):
             # clean
             # =================================================
             "remove_small_pore_components":
-                self.remove_small_checkbox.isChecked(),
+                True,
 
             "min_pore_component_size":
-                self.min_pore_spin.value(),
+                10,
 
             "postprocess_configs":
                 postprocess_configs,
@@ -1282,13 +1308,13 @@ class Stage5Page(QWidget):
             # threshold
             # =================================================
             "use_adaptive_threshold_for_porosity":
-                self.adaptive_checkbox.isChecked(),
+                True,
 
             "adaptive_threshold_max_iters":
-                self.adaptive_iter_spin.value(),
+                25,
 
             "adaptive_threshold_tol":
-                self.adaptive_tol_spin.value(),
+                1e-4,
 
             "threshold_offsets":
                 threshold_offsets,
@@ -1327,25 +1353,25 @@ class Stage5Page(QWidget):
             # tau
             # =================================================
             "tau_nonperc_value":
-                self.tau_nonperc_spin.value(),
+                1e6,
 
             "suppress_taufactor_output":
-                self.suppress_checkbox.isChecked(),
+                True,
 
             # =================================================
             # slice
             # =================================================
             "save_all_y_zx_slice_png":
-                self.save_slice_checkbox.isChecked(),
+                True,
 
             "slice_color_style":
-                self.slice_style_combo.currentText(),
+                "black_yellow",
 
             "slice_show_axis":
-                self.slice_axis_checkbox.isChecked(),
+                False,
 
             "slice_dpi":
-                self.slice_dpi_spin.value(),
+                200,
         }
 
         result = create_task(
@@ -1376,11 +1402,10 @@ class Stage5Page(QWidget):
 
         ret = msg.exec()
 
-        if (
-                ret == QMessageBox.Ok
-                or msg.clickedButton() == go_btn
-        ):
-            self.main_window.menu.setCurrentRow(6)
+        # 6. 跳转到任务中心（无论点 OK 还是「前往任务中心」按钮）
+        if ret == QMessageBox.Ok or msg.clickedButton() == go_btn:
+            self.main_window.menu.setCurrentRow(5)
+            self.main_window.history_page.refresh_task_list()
 
     # =========================================================
     # reset

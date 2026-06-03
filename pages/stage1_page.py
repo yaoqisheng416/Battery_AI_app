@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
+import shutil
 
+from PySide6.QtGui import Qt, QPixmap
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -22,7 +24,7 @@ from api_client import (
     create_task,
     query_task,
 )
-
+from backend.electrode_twin.CBD_generate import BASE_DIR
 
 class Stage1Page(QWidget):
 
@@ -32,129 +34,133 @@ class Stage1Page(QWidget):
         self.task_id = None
 
         layout = QVBoxLayout(self)
+        layout.setSpacing(10)
 
-        # 标题
-        title = QLabel("Stage1 模型训练")
-
+        # 标题 ← 固定高度
+        title = QLabel("Stage1 3D-VAE：用于将切片数据转换为潜空间向量")
+        title.setMaximumHeight(35)  # ← 加这行
         layout.addWidget(title)
 
         # 数据目录
         self.dataset_edit = QLineEdit()
+        self.dataset_edit.setMaximumHeight(35)  # ← 加这行
 
-        btn_dataset = QPushButton(
-            "选择训练数据目录"
-        )
-
-        btn_dataset.clicked.connect(
-            self.select_dataset_dir
-        )
+        btn_dataset = QPushButton("选择训练数据目录")
+        btn_dataset.setMaximumHeight(35)  # ← 加这行
+        btn_dataset.clicked.connect(self.select_dataset_dir)
 
         layout.addWidget(self.dataset_edit)
-
         layout.addWidget(btn_dataset)
 
         # 输出目录
         self.output_edit = QLineEdit()
+        self.output_edit.setMaximumHeight(35)  # ← 加这行
 
-        btn_output = QPushButton(
-            "选择输出目录"
-        )
-
-        btn_output.clicked.connect(
-            self.select_output_dir
-        )
+        btn_output = QPushButton("选择输出目录")
+        btn_output.setMaximumHeight(35)  # ← 加这行
+        btn_output.clicked.connect(self.select_output_dir)
 
         layout.addWidget(self.output_edit)
-
         layout.addWidget(btn_output)
 
         # epoch
+        epoch_label = QLabel("训练 Epoch")
+        epoch_label.setMaximumHeight(30)  # ← 加这行
+        layout.addWidget(epoch_label)
+
         self.epoch_input = QSpinBox()
-
+        self.epoch_input.setRange(0, 999999)
+        self.epoch_input.setSingleStep(1)
         self.epoch_input.setValue(100)
-
         self.epoch_input.setMaximum(100000)
+        self.epoch_input.setMaximumHeight(30)
 
-        layout.addWidget(
-            QLabel("训练 Epoch")
-        )
+        layout.addWidget(self.epoch_input)
 
-        layout.addWidget(
-            self.epoch_input
-        )
 
         # 开始按钮
-        self.start_btn = QPushButton(
-            "开始训练"
-        )
+        self.start_btn = QPushButton("开始训练")
+        self.start_btn.setMaximumHeight(35)  # ← 加这行
+        self.start_btn.clicked.connect(self.start_train)
 
-        self.start_btn.clicked.connect(
-            self.start_train
-        )
-
-        layout.addWidget(
-            self.start_btn
-        )
+        layout.addWidget(self.start_btn)
 
         # 进度条
         self.progress = QProgressBar()
+        self.progress.setMaximumHeight(35)  # ← 加这行
 
-        layout.addWidget(
-            self.progress
+        layout.addWidget(self.progress)
+
+        # ========== Mock 展示区 ==========
+        mock_container = QWidget()
+        mock_layout = QVBoxLayout(mock_container)
+        mock_layout.setContentsMargins(0, 10, 0, 0)
+        mock_container.setFixedHeight(320)
+
+        # 图片
+        self.img_label = QLabel()
+        img_path = os.path.join(BASE_DIR, "mock_data", "slice_0000.png")
+        if os.path.exists(img_path):
+            pixmap = QPixmap(img_path)
+            self.img_label.setPixmap(pixmap.scaled(400, 400, Qt.KeepAspectRatio))
+        self.img_label.setAlignment(Qt.AlignCenter)
+        self.img_label.setStyleSheet("border: 1px solid #ccc;")
+        mock_layout.addWidget(QLabel("案例结果:"))
+        mock_layout.addWidget(self.img_label)
+
+        # 下载按钮
+        btn_original = QPushButton("下载 original_volume.npy")
+        btn_original.setMaximumHeight(35)  # ← 加这行
+        btn_original.clicked.connect(
+            lambda: self.download_file(
+                os.path.join(BASE_DIR, "mock_data", "original_volume.npy"),
+                "original_volume.npy"
+            )
         )
+        mock_layout.addWidget(btn_original)
 
-        # 日志
-        self.log_text = QTextEdit()
-
-        self.log_text.setReadOnly(True)
-
-        layout.addWidget(
-            self.log_text
+        btn_recon = QPushButton("下载 recon_bin_volume.npy")
+        btn_recon.setMaximumHeight(35)  # ← 加这行
+        btn_recon.clicked.connect(
+            lambda: self.download_file(
+                os.path.join(BASE_DIR, "mock_data", "recon_bin_volume.npy"),
+                "recon_bin_volume.npy"
+            )
         )
+        mock_layout.addWidget(btn_recon)
+
+        layout.addWidget(mock_container)
 
         # 定时器轮询
         self.timer = QTimer()
+        self.timer.timeout.connect(self.refresh_task)
 
-        self.timer.timeout.connect(
-            self.refresh_task
-        )
+    def download_file(self, src_path, filename):
+        if not os.path.exists(src_path):
+            QMessageBox.warning(self, "错误", f"文件不存在: {src_path}")
+            return
+        save_path, _ = QFileDialog.getSaveFileName(self, "保存文件", filename)
+        if save_path:
+            shutil.copy(src_path, save_path)
+            QMessageBox.information(self, "完成", f"已保存到: {save_path}")
 
     def select_dataset_dir(self):
-
-        path = QFileDialog.getExistingDirectory(
-            self,
-            "选择训练数据目录"
-        )
-
+        path = QFileDialog.getExistingDirectory(self, "选择训练数据目录")
         if path:
             self.dataset_edit.setText(path)
 
     def select_output_dir(self):
-
-        path = QFileDialog.getExistingDirectory(
-            self,
-            "选择输出目录"
-        )
-
+        path = QFileDialog.getExistingDirectory(self, "选择输出目录")
         if path:
             self.output_edit.setText(path)
 
     def start_train(self):
-
         dataset_dir = self.dataset_edit.text()
-
         output_dir = self.output_edit.text()
-
         epoch = self.epoch_input.value()
 
         if not os.path.exists(dataset_dir):
-
-            QMessageBox.warning(
-                self,
-                "错误",
-                "训练目录不存在"
-            )
-
+            QMessageBox.warning(self, "错误", "训练目录不存在")
             return
 
         payload = {
@@ -163,67 +169,283 @@ class Stage1Page(QWidget):
             "epoch": epoch,
         }
 
-        result = create_task(
-            "/stage1/create-task",
-            payload,
-        )
+        result = create_task("/stage1/create-task", payload)
 
         if not result.get("success", True):
-
-            QMessageBox.warning(
-                self,
-                "错误",
-                result.get("message")
-            )
-
+            QMessageBox.warning(self, "错误", result.get("message"))
             return
 
         self.task_id = result["task_id"]
-
-        self.log_text.append(
-            f"任务创建成功: {self.task_id}"
-        )
-
-        # 开始轮询
+        self.log_text.append(f"任务创建成功: {self.task_id}")
         self.timer.start(2000)
 
     def refresh_task(self):
-
         if not self.task_id:
             return
 
         task = query_task(self.task_id)
-
         status = task.get("status")
-
         progress = task.get("progress", 0)
-
         logs = task.get("logs", [])
 
-        self.progress.setValue(
-            int(progress)
-        )
-
-        self.log_text.setPlainText(
-            "\n".join(logs[-200:])
-        )
+        self.progress.setValue(int(progress))
+        self.log_text.setPlainText("\n".join(logs[-200:]))
 
         if status == "finished":
-
             self.timer.stop()
-
-            QMessageBox.information(
-                self,
-                "完成",
-                "任务执行完成"
-            )
-
+            QMessageBox.information(self, "完成", "任务执行完成")
         elif status == "failed":
-
             self.timer.stop()
+            QMessageBox.warning(self, "失败", task.get("error", ""))
 
-            QMessageBox.warning(
-                self,
-                "失败",
-                task.get("error", "")
-            )
+# class Stage1Page(QWidget):
+#
+#     def __init__(self):
+#         super().__init__()
+#
+#         self.task_id = None
+#
+#         layout = QVBoxLayout(self)
+#
+#         # 标题
+#         title = QLabel("Stage1 3D-VAE：用于将切片数据转换为潜空间向量")
+#
+#         layout.addWidget(title)
+#
+#         # 数据目录
+#         self.dataset_edit = QLineEdit()
+#
+#         btn_dataset = QPushButton(
+#             "选择训练数据目录"
+#         )
+#
+#         btn_dataset.clicked.connect(
+#             self.select_dataset_dir
+#         )
+#
+#         layout.addWidget(self.dataset_edit)
+#
+#         layout.addWidget(btn_dataset)
+#
+#         # 输出目录
+#         self.output_edit = QLineEdit()
+#
+#         btn_output = QPushButton(
+#             "选择输出目录"
+#         )
+#
+#         btn_output.clicked.connect(
+#             self.select_output_dir
+#         )
+#
+#         layout.addWidget(self.output_edit)
+#
+#         layout.addWidget(btn_output)
+#
+#         # epoch
+#         self.epoch_input = QSpinBox()
+#         self.epoch_input.setRange(0, 999999)
+#         self.epoch_input.setSingleStep(1)
+#         self.epoch_input.setValue(100)
+#         self.epoch_input.setMaximum(100000)
+#
+#         layout.addWidget(
+#             QLabel("训练 Epoch")
+#         )
+#
+#         layout.addWidget(
+#             self.epoch_input
+#         )
+#
+#         # 开始按钮
+#         self.start_btn = QPushButton(
+#             "开始训练"
+#         )
+#
+#         self.start_btn.clicked.connect(
+#             self.start_train
+#         )
+#
+#         layout.addWidget(
+#             self.start_btn
+#         )
+#
+#         # 进度条
+#         self.progress = QProgressBar()
+#
+#         layout.addWidget(
+#             self.progress
+#         )
+#
+#         # 日志
+#         # self.log_text = QTextEdit()
+#         #
+#         # self.log_text.setReadOnly(True)
+#         #
+#         # layout.addWidget(
+#         #     self.log_text
+#         # )
+#
+#         # ========== Mock 展示区（替代原日志空白）==========
+#         mock_container = QWidget()
+#         mock_layout = QVBoxLayout(mock_container)
+#         mock_layout.setContentsMargins(0, 10, 0, 0)
+#         mock_container.setFixedHeight(320)
+#
+#         # 图片
+#         self.img_label = QLabel()
+#         img_path = os.path.join(BASE_DIR, "mock_data", "slice_0000.png")
+#         if os.path.exists(img_path):
+#             pixmap = QPixmap(img_path)
+#             self.img_label.setPixmap(pixmap.scaled(350, 350, Qt.KeepAspectRatio))
+#         self.img_label.setAlignment(Qt.AlignCenter)
+#         self.img_label.setStyleSheet("border: 1px solid #ccc;")
+#         mock_layout.addWidget(QLabel("案例结果:"))
+#         mock_layout.addWidget(self.img_label)
+#
+#         # 下载按钮
+#         btn_original = QPushButton("下载 original_volume.npy")
+#         btn_original.clicked.connect(
+#             lambda: self.download_file(
+#                 os.path.join(BASE_DIR, "mock_data", "original_volume.npy"),
+#                 "original_volume.npy"
+#             )
+#         )
+#         mock_layout.addWidget(btn_original)
+#
+#         btn_recon = QPushButton("下载 recon_bin_volume.npy")
+#         btn_recon.clicked.connect(
+#             lambda: self.download_file(
+#                 os.path.join(BASE_DIR, "mock_data", "recon_bin_volume.npy"),
+#                 "recon_bin_volume.npy"
+#             )
+#         )
+#         mock_layout.addWidget(btn_recon)
+#
+#         layout.addWidget(mock_container)
+#
+#         # 定时器轮询
+#         self.timer = QTimer()
+#
+#         self.timer.timeout.connect(
+#             self.refresh_task
+#         )
+#
+#     # 新增下载方法
+#     def download_file(self, src_path, filename):
+#         if not os.path.exists(src_path):
+#             QMessageBox.warning(self, "错误", f"文件不存在: {src_path}")
+#             return
+#         save_path, _ = QFileDialog.getSaveFileName(self, "保存文件", filename)
+#         if save_path:
+#             shutil.copy(src_path, save_path)
+#             QMessageBox.information(self, "完成", f"已保存到: {save_path}")
+#
+#     def select_dataset_dir(self):
+#
+#         path = QFileDialog.getExistingDirectory(
+#             self,
+#             "选择训练数据目录"
+#         )
+#
+#         if path:
+#             self.dataset_edit.setText(path)
+#
+#     def select_output_dir(self):
+#
+#         path = QFileDialog.getExistingDirectory(
+#             self,
+#             "选择输出目录"
+#         )
+#
+#         if path:
+#             self.output_edit.setText(path)
+#
+#     def start_train(self):
+#
+#         dataset_dir = self.dataset_edit.text()
+#
+#         output_dir = self.output_edit.text()
+#
+#         epoch = self.epoch_input.value()
+#
+#         if not os.path.exists(dataset_dir):
+#
+#             QMessageBox.warning(
+#                 self,
+#                 "错误",
+#                 "训练目录不存在"
+#             )
+#
+#             return
+#
+#         payload = {
+#             "dataset_dir": dataset_dir,
+#             "output_dir": output_dir,
+#             "epoch": epoch,
+#         }
+#
+#         result = create_task(
+#             "/stage1/create-task",
+#             payload,
+#         )
+#
+#         if not result.get("success", True):
+#
+#             QMessageBox.warning(
+#                 self,
+#                 "错误",
+#                 result.get("message")
+#             )
+#
+#             return
+#
+#         self.task_id = result["task_id"]
+#
+#         self.log_text.append(
+#             f"任务创建成功: {self.task_id}"
+#         )
+#
+#         # 开始轮询
+#         self.timer.start(2000)
+#
+#     def refresh_task(self):
+#
+#         if not self.task_id:
+#             return
+#
+#         task = query_task(self.task_id)
+#
+#         status = task.get("status")
+#
+#         progress = task.get("progress", 0)
+#
+#         logs = task.get("logs", [])
+#
+#         self.progress.setValue(
+#             int(progress)
+#         )
+#
+#         self.log_text.setPlainText(
+#             "\n".join(logs[-200:])
+#         )
+#
+#         if status == "finished":
+#
+#             self.timer.stop()
+#
+#             QMessageBox.information(
+#                 self,
+#                 "完成",
+#                 "任务执行完成"
+#             )
+#
+#         elif status == "failed":
+#
+#             self.timer.stop()
+#
+#             QMessageBox.warning(
+#                 self,
+#                 "失败",
+#                 task.get("error", "")
+#             )

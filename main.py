@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 import multiprocessing
 import socket
-import subprocess
-import sys
 import time
 
 from PySide6.QtCore import Qt, QTimer
@@ -16,7 +14,6 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QStackedWidget,
-    QTextEdit,
     QVBoxLayout,
     QWidget, QPushButton, QScrollArea,
     # 新增
@@ -27,7 +24,7 @@ from PySide6.QtWidgets import (
 from pages.history_page import HistoryPage
 from pages.stage1_page import Stage1Page
 from pages.stage2_page import Stage2Page
-from pages.stage3_page import Stage3Page
+# from pages.stage3_page import Stage3Page
 from pages.stage4_page import Stage4Page
 from pages.stage5_page import Stage5Page
 from pages.stage6_page import Stage6Page
@@ -78,8 +75,8 @@ class MainWindow(QMainWindow):
         #  换成 QLabel
         desc = QLabel(
             "该平台用于：\n\n"
-            "• Stage1~3：模型训练\n"
-            "• Stage4~6：模型推理与三维结构生成\n"
+            "• Stage1-2：生成模型训练\n"
+            "• Stage4-6三维多相结构生成\n"
             "• 实时日志展示\n"
             "• 实时任务状态查询\n"
             "• 模型版本管理\n"
@@ -142,9 +139,9 @@ class MainWindow(QMainWindow):
         self.menu.setFixedWidth(400)
 
         menus = [
-            "Stage1 模型训练",
-            "Stage2 模型训练",
-            "Stage3 模型训练",
+            "Stage1 三维变分自编码器（3D VAE）训练",
+            # "Stage2 模型训练",
+            "Stage2 隐式扩散去噪生成模型（LDM）训练",
             "Stage4 条件可控的两相结构生成",
             "Stage5 生成特定体积",
             "Stage6 CBD三相电极结构生成与参数拟合",
@@ -159,7 +156,7 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.stage1_page = Stage1Page()
         self.stage2_page = Stage2Page()
-        self.stage3_page = Stage3Page()
+        # self.stage3_page = Stage3Page()
         self.stage4_page = Stage4Page(self)
         self.stage5_page = Stage5Page(self)
         self.stage6_page = Stage6Page(self)
@@ -167,7 +164,7 @@ class MainWindow(QMainWindow):
 
         self.stack.addWidget(self.stage1_page)
         self.stack.addWidget(self.stage2_page)
-        self.stack.addWidget(self.stage3_page)
+        # self.stack.addWidget(self.stage3_page)
         self.stack.addWidget(self.stage4_page)
         self.stack.addWidget(self.stage5_page)
         self.stack.addWidget(self.stage6_page)

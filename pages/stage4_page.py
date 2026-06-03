@@ -444,6 +444,7 @@ class Stage4Page(QWidget):
 
         if ret == QMessageBox.Ok or msg.clickedButton() == go_btn:
             self.main_window.menu.setCurrentRow(5)
+            self.main_window.history_page.refresh_task_list()
 
     def refresh_task(self):
 

@@ -2,7 +2,7 @@
 import os
 import requests
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 from PySide6.QtGui import QPixmap
 
@@ -33,13 +33,17 @@ class HistoryPage(QWidget):
 
     def __init__(self):
         super().__init__()
-
         self.current_task_id = None
-
         self.current_files = []
-
+        self.last_log_count = 0  # ← 记录上次日志条数
         self.init_ui()
+        self.load_tasks()
+        # ========== 日志定时刷新 ==========
+        self.log_timer = QTimer()
+        self.log_timer.timeout.connect(self.refresh_logs)
 
+    # ========== 新增：公开刷新方法 ==========
+    def refresh_task_list(self):
         self.load_tasks()
 
     # =====================================================
@@ -227,101 +231,67 @@ class HistoryPage(QWidget):
     # load tasks
     # =====================================================
     def load_tasks(self):
-
         self.task_list.clear()
 
         try:
-
             tasks = query_all_tasks()
-
         except Exception as e:
-
-            QMessageBox.warning(
-                self,
-                "错误",
-                str(e)
-            )
-
+            QMessageBox.warning(self, "错误", str(e))
             return
 
         for item in reversed(tasks):
+            task_id = item.get("task_id", "")
+            title = item.get("title", "未知任务")
+            create_time = item.get("create_time", "")
+            status = item.get("status", "unknown")
 
-            task_id = item.get(
-                "task_id",
-                ""
-            )
-
-            title = item.get(
-                "title",
-                "未知任务"
-            )
-
-            create_time = item.get(
-                "create_time",
-                ""
-            )
-
-            status = item.get(
-                "status",
-                "unknown"
-            )
-
-            text = (
-                f"{title}\n"
-                f"{create_time}\n"
-                f"{status}"
-            )
+            text = f"{title}\n{create_time}\n{status}"
 
             list_item = QListWidgetItem(text)
+            list_item.setData(Qt.UserRole, task_id)
+            self.task_list.addItem(list_item)
 
-            list_item.setData(
-                Qt.UserRole,
-                task_id
-            )
-
-            self.task_list.addItem(
-                list_item
-            )
-
-    # =====================================================
-    # click task
-    # =====================================================
     def on_task_clicked(self, item):
-
         task_id = item.data(Qt.UserRole)
-
         self.current_task_id = task_id
 
+        # 停止旧定时器，启动新的
+        self.log_timer.stop()
+        self.log_timer.start(20000)  # 20秒刷新一次
+
         task = query_task(task_id)
+        status = task.get("status", "")
+        progress = task.get("progress", 0)
+        logs = task.get("logs", [])
 
-        status = task.get(
-            "status",
-            ""
-        )
-
-        progress = task.get(
-            "progress",
-            0
-        )
-
-        logs = task.get(
-            "logs",
-            []
-        )
-
-        self.info_label.setText(
-            f"任务ID: {task_id} | 状态: {status}"
-        )
-
-        self.progress.setValue(
-            int(progress)
-        )
-
-        self.log_text.setPlainText(
-            "\n".join(logs[-200:])
-        )
+        self.info_label.setText(f"任务ID: {task_id} | 状态: {status}")
+        self.progress.setValue(int(progress))
+        self.log_text.setPlainText("\n".join(logs[-200:]))
 
         self.load_files(task_id)
+
+        # ========== 定时刷新：只追加新行 ==========
+
+    def refresh_logs(self):
+        if not self.current_task_id:
+            return
+
+        task = query_task(self.current_task_id)
+        status = task.get("status", "")
+        progress = task.get("progress", 0)
+        logs = task.get("logs", [])
+
+        self.progress.setValue(int(progress))
+
+        # 只追加新增的日志，不覆盖
+        new_logs = logs[self.last_log_count:]
+        if new_logs:
+            for line in new_logs:
+                self.log_text.append(line)
+            self.last_log_count = len(logs)  # ← 更新条数
+
+        if status in ("finished", "failed"):
+            self.log_timer.stop()
 
     # =====================================================
     # load files
