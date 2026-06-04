@@ -76,7 +76,7 @@ class MainWindow(QMainWindow):
         desc = QLabel(
             "该平台用于：\n\n"
             "• Stage1-2：生成模型训练\n"
-            "• Stage4-6三维多相结构生成\n"
+            "• Stage4-6：三维多相结构生成\n"
             "• 实时日志展示\n"
             "• 实时任务状态查询\n"
             "• 模型版本管理\n"
