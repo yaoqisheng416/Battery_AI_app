@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 import os
+import numpy as np
 import requests
 
 from PySide6.QtCore import Qt, QTimer
-
-from PySide6.QtGui import QPixmap
 
 from PySide6.QtWidgets import (
     QWidget,
@@ -20,6 +19,10 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QSplitter,
     QComboBox,
+)
+
+from backend.electrode_twin.openmesocell_npy_viewer_yzx_meshing_no_visual_grid import (
+    OpenMesoCellNPYViewer,
 )
 
 from api_client import (
@@ -137,7 +140,7 @@ class HistoryPage(QWidget):
 
         right_layout.addWidget(
             self.log_text,
-            3
+            1
         )
 
         # =================================================
@@ -145,9 +148,21 @@ class HistoryPage(QWidget):
         # =================================================
         file_title = QLabel("结果文件")
 
+        file_title.setStyleSheet("""
+        font-size:16px;
+        font-weight:bold;
+        color:#000000;
+        padding:5px;
+        """)
+
         right_layout.addWidget(file_title)
 
         self.file_combo = QComboBox()
+
+        self.file_combo.setStyleSheet("""
+        font-weight:bold;
+        color:#000000;
+        """)
 
         self.file_combo.currentIndexChanged.connect(
             self.preview_file
@@ -158,25 +173,21 @@ class HistoryPage(QWidget):
         )
 
         # =================================================
-        # image preview
+        # npy viewer (full OpenMesoCell viewer embedded)
         # =================================================
-        self.image_label = QLabel()
+        npy_viewer_label = QLabel("Npy 可视化")
 
-        self.image_label.setAlignment(
-            Qt.AlignCenter
-        )
-
-        self.image_label.setMinimumHeight(400)
-
-        self.image_label.setStyleSheet("""
-        border:1px solid #444;
-        border-radius:10px;
+        npy_viewer_label.setStyleSheet("""
+        font-size:14px;
+        font-weight:bold;
+        color:#000000;
+        padding:5px;
         """)
 
-        right_layout.addWidget(
-            self.image_label,
-            4
-        )
+        right_layout.addWidget(npy_viewer_label)
+
+        self.npy_viewer = OpenMesoCellNPYViewer()
+        right_layout.addWidget(self.npy_viewer, 6)
 
         # =================================================
         # buttons
@@ -191,10 +202,6 @@ class HistoryPage(QWidget):
             "下载目录ZIP"
         )
 
-        self.btn_view_json = QPushButton(
-            "查看JSON"
-        )
-
         self.btn_download_file.clicked.connect(
             self.download_file
         )
@@ -203,20 +210,12 @@ class HistoryPage(QWidget):
             self.download_dir
         )
 
-        self.btn_view_json.clicked.connect(
-            self.view_json
-        )
-
         btn_layout.addWidget(
             self.btn_download_file
         )
 
         btn_layout.addWidget(
             self.btn_download_dir
-        )
-
-        btn_layout.addWidget(
-            self.btn_view_json
         )
 
         right_layout.addLayout(btn_layout)
@@ -257,7 +256,7 @@ class HistoryPage(QWidget):
 
         # 停止旧定时器，启动新的
         self.log_timer.stop()
-        self.log_timer.start(20000)  # 20秒刷新一次
+        self.log_timer.start(5000)  # 5秒刷新一次
 
         task = query_task(task_id)
         status = task.get("status", "")
@@ -292,6 +291,8 @@ class HistoryPage(QWidget):
 
         if status in ("finished", "failed"):
             self.log_timer.stop()
+            # 任务结束时自动刷新结果文件列表
+            self.load_files(self.current_task_id)
 
     # =====================================================
     # load files
@@ -308,11 +309,16 @@ class HistoryPage(QWidget):
                 timeout=10,
             ).json()
 
-        except Exception:
-
+        except Exception as e:
+            print(f"[load_files] API请求失败: {e}")
             return
 
         files = res.get("files", [])
+        # print(f"[load_files] 原始文件数: {len(files)}")
+
+        # 仅保留 .npy 文件，过滤掉图片、目录等其他文件
+        files = [f for f in files if f.get('name', '').lower().endswith('.npy')]
+        # print(f"[load_files] 过滤后文件数: {len(files)}")
 
         self.current_files = files
 
@@ -338,51 +344,37 @@ class HistoryPage(QWidget):
         file_info = self.current_files[idx]
 
         path = file_info["path"]
+        name = file_info.get("name", "")
 
-        ext = os.path.splitext(path)[-1].lower()
+        if not name.lower().endswith(".npy"):
+            self.npy_viewer.clear_volume()
+            return
 
         file_url = (
             f"{API_BASE}/download/file"
             f"?path={path}"
         )
 
-        # =================================================
-        # image
-        # =================================================
-        if ext in [".png", ".jpg", ".jpeg"]:
+        try:
 
-            try:
+            response = requests.get(file_url)
 
-                response = requests.get(
-                    file_url
-                )
+            temp_path = "temp_preview.npy"
 
-                temp_path = "temp_preview.png"
+            with open(temp_path, "wb") as f:
+                f.write(response.content)
 
-                with open(
-                        temp_path,
-                        "wb"
-                ) as f:
+            arr = np.load(temp_path)
 
-                    f.write(response.content)
+            if arr.ndim != 3:
+                self.npy_viewer.clear_volume()
+                return
 
-                pixmap = QPixmap(temp_path)
+            self.npy_viewer.load_volume_from_array(arr)
 
-                self.image_label.setPixmap(
-                    pixmap.scaled(
-                        self.image_label.size(),
-                        Qt.KeepAspectRatio,
-                        Qt.SmoothTransformation,
-                    )
-                )
-
-            except Exception as e:
-
-                print(e)
-
-        else:
-
-            self.image_label.clear()
+        except Exception as e:
+            print(f"[preview_file] 加载npy失败: {e}")
+            self.npy_viewer.clear_volume()
 
     # =====================================================
     # download file
@@ -486,49 +478,3 @@ class HistoryPage(QWidget):
                 str(e)
             )
 
-    # =====================================================
-    # json
-    # =====================================================
-    def view_json(self):
-
-        idx = self.file_combo.currentIndex()
-
-        if idx < 0:
-            return
-
-        file_info = self.current_files[idx]
-
-        path = file_info["path"]
-
-        ext = os.path.splitext(path)[-1]
-
-        if ext != ".json":
-
-            QMessageBox.information(
-                self,
-                "提示",
-                "当前不是JSON文件"
-            )
-
-            return
-
-        try:
-
-            url = (
-                f"{API_BASE}/download/file"
-                f"?path={path}"
-            )
-
-            data = requests.get(url).json()
-
-            self.log_text.setPlainText(
-                str(data)
-            )
-
-        except Exception as e:
-
-            QMessageBox.warning(
-                self,
-                "错误",
-                str(e)
-            )
