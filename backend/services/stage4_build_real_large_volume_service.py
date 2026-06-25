@@ -9,7 +9,7 @@ from backend.electrode_twin.build_large_volume_conditions_from_real import ensur
 # ============================================================
 # logger
 # ============================================================
-logger = logging.getLogger("stage5_build_real_large_volume_service")
+logger = logging.getLogger("stage4_build_real_large_volume_service")
 
 if not logger.handlers:
     handler = logging.StreamHandler()

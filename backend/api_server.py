@@ -21,10 +21,10 @@ from backend.core.task_manager import (
     get_task, TASK_STORE,
 )
 
-from backend.tasks.stage4_task import run_stage4_task
-from backend.tasks.stage5_task import run_large_volume_generate_task, run_local_conditions_generate_task, \
+from backend.tasks.stage3_task import run_stage3_task
+from backend.tasks.stage4_task import run_large_volume_generate_task, run_local_conditions_generate_task, \
     run_generate_specific_volume_task
-from backend.tasks.stage6_task import run_stage6_cbd_fit_task, run_stage6_cbd_generate_task
+from backend.tasks.stage5_task import run_stage5_cbd_fit_task, run_stage5_cbd_generate_task
 
 logger = logging.getLogger("api_server")
 
@@ -74,10 +74,10 @@ def get_all_tasks():
 
 
 # =========================================================
-# Create Stage4 generate_structure_from_condition Task API
+# Create Stage3 generate_structure_from_condition Task API
 # =========================================================
-@app.post("/stage4/generate_structure_from_condition")
-def create_stage4_task(
+@app.post("/stage3/generate_structure_from_condition")
+def create_stage3_task(
         request: Stage4Request
 ):
     if request.task_id is not None \
@@ -86,18 +86,18 @@ def create_stage4_task(
         task_id = request.task_id
 
     else:
-        task_id = create_task(title="Stage4 条件可控的两相结构生成")
+        task_id = create_task(title="Stage3 条件可控的两相结构生成")
 
     #  打印日志（调试用）
-    print(f"[Stage4] 任务ID: {task_id}")
-    print(f"[Stage4] VAE路径: {request.vae_path}")
-    print(f"[Stage4] LDM路径: {request.ldm_path}")
-    print(f"[Stage4] Porosity: {request.porosity}")
-    print(f"[Stage4] Tau Z: {request.tau_z}")
-    print(f"[Stage4] Surface Area: {request.surface_area}")
+    print(f"[Stage3] 任务ID: {task_id}")
+    print(f"[Stage3] VAE路径: {request.vae_path}")
+    print(f"[Stage3] LDM路径: {request.ldm_path}")
+    print(f"[Stage3] Porosity: {request.porosity}")
+    print(f"[Stage3] Tau Z: {request.tau_z}")
+    print(f"[Stage3] Surface Area: {request.surface_area}")
 
     thread = threading.Thread(
-        target=run_stage4_task,
+        target=run_stage3_task,
         args=(task_id, request),
         daemon=True,
     )
@@ -126,10 +126,10 @@ def query_task(task_id: str):
 
 
 # ============================================================
-# Create Stage5 build_large_volume_conditions_from_real Task API
+# Create Stage4 build_large_volume_conditions_from_real Task API
 # ============================================================
-@app.post("/stage5/local-conditions-generate")
-def create_stage5_task(
+@app.post("/stage4/local-conditions-generate")
+def create_stage4_task(
         request: localConditionsGenerateRequest
 ):
     # ============================================
@@ -143,7 +143,7 @@ def create_stage5_task(
     else:
 
         task_id = create_task(
-            title="Stage5 从真实体积构建local conditions"
+            title="Stage4 从真实体积构建local conditions"
         )
 
     # ============================================
@@ -167,10 +167,10 @@ def create_stage5_task(
 
 
 # ============================================================
-# Create Stage5 large-volume-generate Task API
+# Create Stage4 large-volume-generate Task API
 # ============================================================
-@app.post("/stage5/large-volume-generate")
-def create_stage5_task(
+@app.post("/stage4/large-volume-generate")
+def create_stage4_task(
         request: largeVolumeGenerateRequest
 ):
     # ============================================
@@ -184,7 +184,7 @@ def create_stage5_task(
     else:
 
         task_id = create_task(
-            title="Stage5 224³大体积生成"
+            title="Stage4 224³大体积生成"
         )
 
     # ============================================
@@ -208,15 +208,15 @@ def create_stage5_task(
 
 
 # ============================================================
-# Create Stage5 GenerateSpecificVolume Task API 新stage5
+# Create Stage4 GenerateSpecificVolume Task API 新stage5
 # ============================================================
-@app.post("/stage5/generate-specific-volume")
+@app.post("/stage4/generate-specific-volume")
 def create_stage5_task(request: GenerateSpecificVolumeRequest):
 
     if request.task_id:
         task_id = request.task_id
     else:
-        task_id = create_task("Stage5 生成特定体积")
+        task_id = create_task("Stage4 生成特定体积")
 
     thread = threading.Thread(
         target=run_generate_specific_volume_task,
@@ -233,10 +233,10 @@ def create_stage5_task(request: GenerateSpecificVolumeRequest):
 
 
 # ============================================================
-# Create Stage6 cbd-generate Task API
+# Create Stage5 cbd-generate Task API
 # ============================================================
-@app.post("/stage6/cbd-generate")
-def create_stage6_task(
+@app.post("/stage5/cbd-generate")
+def create_stage5_task(
         request: cbdGenerateRequest
 ):
     if request.task_id is not None \
@@ -248,11 +248,11 @@ def create_stage6_task(
 
         task_id = create_task(
 
-            title="Stage6 CBD三相电极结构生成"
+            title="Stage5 CBD三相电极结构生成"
         )
 
     thread = threading.Thread(
-        target=run_stage6_cbd_generate_task,
+        target=run_stage5_cbd_generate_task,
         args=(task_id, request),
         daemon=True,
     )
@@ -266,10 +266,10 @@ def create_stage6_task(
 
 
 # ============================================================
-# Create Stage6 fit_cbd_spreading_parameter Task API
+# Create Stage5 fit_cbd_spreading_parameter Task API
 # ============================================================
-@app.post("/stage6/fit-cbd-spreading-parameter")
-def create_stage6_task(
+@app.post("/stage5/fit-cbd-spreading-parameter")
+def create_stage5_task(
         request: fitParameterRequest
 ):
     if request.task_id is not None \
@@ -281,11 +281,11 @@ def create_stage6_task(
 
         task_id = create_task(
 
-            title="Stage6 CBD参数拟合"
+            title="Stage5 CBD参数拟合"
         )
 
     thread = threading.Thread(
-        target=run_stage6_cbd_fit_task,
+        target=run_stage5_cbd_fit_task,
         args=(task_id, request),
         daemon=True,
     )
@@ -382,7 +382,7 @@ async def upload_best_two_phase_structure(
     # task id
     # ====================================================
     task_id = create_task(
-        title="Stage6 CBD三相电极结构生成"
+        title="Stage5 CBD三相电极结构生成"
     )
 
     # ====================================================

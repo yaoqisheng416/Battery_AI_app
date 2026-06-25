@@ -24,10 +24,9 @@ from PySide6.QtWidgets import (
 from pages.history_page import HistoryPage
 from pages.stage1_page import Stage1Page
 from pages.stage2_page import Stage2Page
-# from pages.stage3_page import Stage3Page
+from pages.stage3_page import Stage3Page
 from pages.stage4_page import Stage4Page
 from pages.stage5_page import Stage5Page
-from pages.stage6_page import Stage6Page
 import sys
 import os
 
@@ -140,11 +139,10 @@ class MainWindow(QMainWindow):
 
         menus = [
             "Stage1 三维变分自编码器（3D VAE）训练",
-            # "Stage2 模型训练",
             "Stage2 隐式扩散去噪生成模型（LDM）训练",
-            "Stage4 条件可控的两相结构生成",
-            "Stage5 生成特定体积",
-            "Stage6 CBD三相电极结构生成与参数拟合",
+            "Stage3 条件可控的两相结构生成",
+            "Stage4 生成特定体积",
+            "Stage5 CBD三相电极结构生成与参数拟合",
             "任务中心",
         ]
 
@@ -156,18 +154,16 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.stage1_page = Stage1Page()
         self.stage2_page = Stage2Page()
-        # self.stage3_page = Stage3Page()
+        self.stage3_page = Stage3Page(self)
         self.stage4_page = Stage4Page(self)
         self.stage5_page = Stage5Page(self)
-        self.stage6_page = Stage6Page(self)
         self.history_page = HistoryPage()
 
         self.stack.addWidget(self.stage1_page)
         self.stack.addWidget(self.stage2_page)
-        # self.stack.addWidget(self.stage3_page)
+        self.stack.addWidget(self.stage3_page)
         self.stack.addWidget(self.stage4_page)
         self.stack.addWidget(self.stage5_page)
-        self.stack.addWidget(self.stage6_page)
         self.stack.addWidget(self.history_page)
 
         body_layout.addWidget(self.menu)

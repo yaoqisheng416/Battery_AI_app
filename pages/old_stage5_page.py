@@ -973,7 +973,7 @@ class OldStage5Page(QWidget):
         }
 
         result = create_task(
-            "/stage5/local-conditions-generate",
+            "/stage4/local-conditions-generate",
             payload
         )
 

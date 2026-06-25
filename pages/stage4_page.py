@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
+import json
+import os
+import sys
+
 import requests
-from PySide6.QtCore import Qt
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -9,47 +13,101 @@ from PySide6.QtWidgets import (
     QPushButton,
     QMessageBox,
     QComboBox,
-    QDoubleSpinBox, QFileDialog, QGroupBox, QLineEdit, QSpinBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QGroupBox,
+    QLineEdit,
+    QSpinBox,
+    QCheckBox,
+    QTextEdit,
+    QScrollArea,
+    QGridLayout,
 )
 
 from api_client import (
     create_task,
-    query_task,
-     API_BASE,
+    API_BASE,
 )
+
+
+def resource_path(relative_path):
+
+    if hasattr(sys, "_MEIPASS"):
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
 
 
 class Stage4Page(QWidget):
 
-    def __init__(self, main_window):  # 接收 MainWindow 引用
+    def __init__(self, main_window):
         super().__init__()
-        self.main_window = main_window  # 保存引用
-        self.task_id = None
 
-        #  保存用户选择的模型路径
+        self.main_window = main_window
+
         self.selected_vae_path = None
         self.selected_ldm_path = None
 
-        # ⭐ 默认参数（用于恢复默认）
-        self.default_device = "cuda"
-        self.default_num_samples = 32
-        self.default_porosity = 0.2
-        self.default_tau = 7
-        self.default_surface = 1150
+        self.manual_patch_widgets = []
+
+        self.default_metrics_csv = resource_path(
+            "backend/electrode_twin/latent_dataset/train_metrics_table.csv"
+        )
+
+        self.init_ui()
+
+        self.load_models()
+
+    # =========================================================
+    # UI
+    # =========================================================
+    def init_ui(self):
 
         root_layout = QVBoxLayout(self)
-        root_layout.setSpacing(15)
 
-        # ============================================
-        # 顶部提示
-        # ============================================
-        tip_label = QLabel(
-            "💡 选择模型版本和条件参数，设置输出目录后点击「开始 Stage4 生成，任务将提交到「任务中心」,可前往进行查看状态\n"
-            "点解'恢复默认参数'按钮再次输入参数 进行推理。"
+        # =====================================================
+        # title
+        # =====================================================
+        title = QLabel(
+            "Stage4 生成特定体积"
         )
-        tip_label.setWordWrap(True)
-        tip_label.setAlignment(Qt.AlignCenter)
-        tip_label.setStyleSheet("""
+
+        title.setStyleSheet("""
+        font-size:24px;
+        font-weight:bold;
+        color:white;
+        padding:10px;
+        """)
+
+        root_layout.addWidget(title)
+
+        # =====================================================
+        # scroll
+        # =====================================================
+        scroll = QScrollArea()
+
+        scroll.setWidgetResizable(True)
+
+        root_layout.addWidget(scroll)
+
+        container = QWidget()
+
+        scroll.setWidget(container)
+
+        layout = QVBoxLayout(container)
+
+        # =====================================================
+        # tip
+        # =====================================================
+        tip = QLabel(
+            "💡 根据用户输入的孔隙率 + 迂曲度条件，生成并拼接大体积 AM-pore 数字孪生结构, 并保存最终体数据沿 Y 方向的全部 ZX 切片可视化图"
+        )
+
+        tip.setWordWrap(True)
+
+        tip.setStyleSheet("""
             QLabel {
                 font-size: 12px;
                 color: #4f8cff;
@@ -59,438 +117,990 @@ class Stage4Page(QWidget):
                 border: 2px solid #4f8cff;
             }
         """)
-        root_layout.addWidget(tip_label)
 
-        # ============================================
-        # 模型选择区域（ 重构）
-        # ============================================
-        model_group = QGroupBox("模型选择")
-        model_layout = QHBoxLayout(model_group)
-        model_layout.setSpacing(15)
+        layout.addWidget(tip)
 
-        #  VAE 模型选择
-        vae_label = QLabel("VAE 模型:")
-        self.vae_combo = QComboBox()
-        self.vae_combo.setMinimumWidth(250)
-        self.vae_combo.currentIndexChanged.connect(self.on_vae_changed)
+        # =====================================================
+        # model
+        # =====================================================
+        self.build_model_group(layout)
 
-        #  LDM 模型选择
-        ldm_label = QLabel("LDM 模型:")
-        self.ldm_combo = QComboBox()
-        self.ldm_combo.setMinimumWidth(250)
-        self.ldm_combo.currentIndexChanged.connect(self.on_ldm_changed)
+        # =====================================================
+        # path
+        # =====================================================
+        self.build_path_group(layout)
 
-        #  显示选中的路径
-        self.path_label = QLabel("未选择模型")
-        self.path_label.setWordWrap(True)
-        self.path_label.setStyleSheet("""
-                    QLabel {
-                        font-size: 11px;
-                        color: #888;
-                        padding: 5px;
-                        background: #1e1f24;
-                        border-radius: 5px;
-                    }
-                """)
+        # =====================================================
+        # condition
+        # =====================================================
+        self.build_condition_group(layout)
 
-        model_layout.addWidget(vae_label)
-        model_layout.addWidget(self.vae_combo)
-        model_layout.addWidget(ldm_label)
-        model_layout.addWidget(self.ldm_combo)
-        model_layout.addWidget(self.path_label)
-        model_layout.addStretch()
+        # =====================================================
+        # generation
+        # =====================================================
+        self.build_generation_group(layout)
 
-        root_layout.addWidget(model_group)
-
-        # ============================================
-        # ⭐ 设备和采样数选择（新增）
-        # ============================================
-        device_group = QGroupBox("设备与采样")
-        device_layout = QHBoxLayout(device_group)
-        device_layout.setSpacing(15)
-
-        # DEVICE 选择
-        device_label = QLabel("设备 (DEVICE):")
-        self.device_combo = QComboBox()
-        self.device_combo.addItems(["cuda", "cpu"])
-        self.device_combo.setCurrentText("cuda")  # ⭐ 默认 cuda
-        self.device_combo.setMinimumWidth(150)
-        self.device_combo.currentIndexChanged.connect(self.on_device_changed)
-
-        # NUM_SAMPLES 选择
-        samples_label = QLabel("采样数 (NUM_SAMPLES):")
-        self.samples_spin = QSpinBox()  # ⭐ 使用 QSpinBox
-        self.samples_spin.setRange(8, 512)  # ⭐ 范围：8 ~ 512
-        self.samples_spin.setSingleStep(8)  # ⭐ 每次增减 8
-        self.samples_spin.setValue(32)  # ⭐ 默认 32
-        self.samples_spin.setMinimumWidth(150)
-        self.samples_spin.valueChanged.connect(self.on_samples_changed)
-
-        device_layout.addWidget(device_label)
-        device_layout.addWidget(self.device_combo)
-        device_layout.addWidget(samples_label)
-        device_layout.addWidget(self.samples_spin)
-        device_layout.addStretch()
-
-        root_layout.addWidget(device_group)
-
-        # ============================================
-        # 条件参数（水平排列）
-        # ============================================
-        param_group = QGroupBox("条件参数")
-        param_layout = QHBoxLayout(param_group)
-        param_layout.setSpacing(15)
-
-        title2 = QLabel("参数:")
-        self.porosity_input = QDoubleSpinBox()
-        self.porosity_input.setValue(0.2)
-        self.porosity_input.setDecimals(4)
-        self.porosity_input.setPrefix("Porosity: ")
-        self.porosity_input.setMinimumWidth(150)
-
-        self.tau_input = QDoubleSpinBox()
-        self.tau_input.setValue(7)
-        self.tau_input.setPrefix("Tau Z: ")
-        self.tau_input.setMinimumWidth(150)
-
-        self.surface_input = QDoubleSpinBox()
-        self.surface_input.setRange(0, 999999)
-        self.surface_input.setDecimals(2)
-        self.surface_input.setSingleStep(10)
-        self.surface_input.setValue(1150)
-        self.surface_input.setPrefix("Surface Area: ")
-        self.surface_input.setMinimumWidth(150)
-
-        param_layout.addWidget(title2)
-        param_layout.addWidget(self.porosity_input)
-        param_layout.addWidget(self.tau_input)
-        param_layout.addWidget(self.surface_input)
-        param_layout.addStretch()
-
-        root_layout.addWidget(param_group)
-
-        # ============================================
-        # 输出目录选择（ 新增）
-        # ============================================
-        # output_group = QGroupBox("输出目录")
-        # output_layout = QHBoxLayout(output_group)
-        # output_layout.setSpacing(15)
-        #
-        # self.out_dir_edit = QLineEdit()
-        # self.out_dir_edit.setPlaceholderText("选择输出目录...")
-        # self.out_dir_edit.setMinimumWidth(400)
-        #
-        # btn_out_dir = QPushButton("选择输出目录")
-        # btn_out_dir.clicked.connect(self.select_out_dir)
-        #
-        # output_layout.addWidget(QLabel("输出目录:"))
-        # output_layout.addWidget(self.out_dir_edit)
-        # output_layout.addWidget(btn_out_dir)
-        # output_layout.addStretch()
-        #
-        # root_layout.addWidget(output_group)
-
-        # ============================================
-        # 按钮区域（ 修改）
-        # ============================================
+        # =====================================================
+        # btn
+        # =====================================================
         btn_layout = QHBoxLayout()
 
-        btn_start = QPushButton("开始 Stage4 生成")
-        btn_start.setMinimumHeight(50)
-        btn_start.clicked.connect(self.start_generate)
-        btn_start.setStyleSheet("""
-            QPushButton {
-                background: #4f8cff;
-                color: white;
-                border-radius: 10px;
-                font-weight: bold;
-                font-size: 16px;
+        btn_run = QPushButton(
+            "开始执行 Stage4 生成特定体积"
+        )
+
+        btn_run.setMinimumHeight(50)
+
+        btn_run.setStyleSheet("""
+            QPushButton{
+                background:#4f8cff;
+                color:white;
+                border-radius:8px;
+                font-size:16px;
+                font-weight:bold;
             }
-            QPushButton:hover {
-                background: #6aa1ff;
+
+            QPushButton:hover{
+                background:#6aa1ff;
             }
         """)
 
-        btn_reset = QPushButton("恢复默认参数")
+        btn_run.clicked.connect(
+            self.start_task
+        )
+
+        btn_reset = QPushButton(
+            "恢复默认参数"
+        )
+
         btn_reset.setMinimumHeight(50)
-        btn_reset.clicked.connect(self.reset_params)
+
         btn_reset.setStyleSheet("""
-            QPushButton {
-                background: #666;
-                color: white;
-                border-radius: 10px;
-                font-weight: bold;
-                font-size: 16px;
+            QPushButton{
+                background:#666;
+                color:white;
+                border-radius:8px;
+                font-size:16px;
+                font-weight:bold;
             }
-            QPushButton:hover {
-                background: #888;
+
+            QPushButton:hover{
+                background:#888;
             }
         """)
 
-        btn_layout.addWidget(btn_start)
+        btn_reset.clicked.connect(
+            self.reset_params
+        )
+
+        btn_layout.addWidget(btn_run)
         btn_layout.addWidget(btn_reset)
 
-        root_layout.addLayout(btn_layout)
-        root_layout.addStretch()
+        layout.addLayout(btn_layout)
 
-        # ============================================
-        #  加载模型列表
-        # ============================================
-        self.load_models()
+        layout.addStretch()
 
-    # ============================================
-    # 选择输出目录
-    # ============================================
-    def select_out_dir(self):
-        """选择输出目录"""
-        directory = QFileDialog.getExistingDirectory(self, "选择输出目录")
-        if directory:
-            self.out_dir_edit.setText(directory)
+    # =========================================================
+    # helper
+    # =========================================================
+    def create_form_row(
+            self,
+            label_text,
+            widget,
+            layout,
+            label_width=260,
+    ):
 
-    # ============================================
-    #  恢复默认参数（ 恢复所有参数，包括 device 和 num_samples）
-    # ============================================
-    def reset_params(self):
-        """恢复所有默认参数"""
-        #  恢复条件参数
-        self.porosity_input.setValue(self.default_porosity)
-        self.tau_input.setValue(self.default_tau)
-        self.surface_input.setValue(self.default_surface)
+        row = QHBoxLayout()
 
-        #  恢复设备（默认 cuda）
-        self.device_combo.setCurrentText(self.default_device)
+        label = QLabel(label_text)
 
-        #  恢复采样数（默认 32）
-        self.samples_spin.setValue(self.default_num_samples)
+        label.setFixedWidth(label_width)
 
-        #  恢复模型为最新（已经在 load_models 中默认选中）
-        # 如果需要强制刷新，可以重新调用 load_models()
-        self.load_models()
+        row.addWidget(label)
+        row.addWidget(widget)
 
-        print(" 所有参数已恢复默认")
-        self.main_window.show_message("提示", "所有参数已恢复默认！")
+        row.addStretch()
 
-    # ============================================
-    #  加载模型（适配新接口）
-    # ============================================
+        layout.addLayout(row)
+
+    # =========================================================
+    # model
+    # =========================================================
+    def build_model_group(self, layout):
+
+        group = QGroupBox("模型选择")
+
+        g_layout = QVBoxLayout(group)
+
+        self.vae_combo = QComboBox()
+        self.ldm_combo = QComboBox()
+
+        self.model_label = QLabel("未选择模型")
+
+        self.model_label.setStyleSheet("""
+            QLabel{
+                background:#1e1f24;
+                border-radius:5px;
+                padding:6px;
+                color:#aaa;
+            }
+        """)
+
+        self.vae_combo.currentIndexChanged.connect(
+            self.on_vae_changed
+        )
+
+        self.ldm_combo.currentIndexChanged.connect(
+            self.on_ldm_changed
+        )
+
+        row1 = QHBoxLayout()
+        row1.addWidget(QLabel("VAE"))
+        row1.addWidget(self.vae_combo)
+
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("LDM"))
+        row2.addWidget(self.ldm_combo)
+
+        g_layout.addLayout(row1)
+        g_layout.addLayout(row2)
+        g_layout.addWidget(self.model_label)
+
+        layout.addWidget(group)
+
+    # =========================================================
+    # path
+    # =========================================================
+    def build_path_group(self, layout):
+
+        group = QGroupBox("路径参数")
+
+        g_layout = QVBoxLayout(group)
+
+        self.summary_json_edit = QLineEdit()
+
+        self.out_dir_edit = QLineEdit()
+
+        btn_summary = QPushButton("选择")
+        btn_out = QPushButton("选择")
+
+        btn_summary.clicked.connect(
+            self.select_summary_json
+        )
+
+        btn_out.clicked.connect(
+            self.select_out_dir
+        )
+
+        row1 = QHBoxLayout()
+        row1.addWidget(QLabel("summary_json"))
+        row1.addWidget(self.summary_json_edit)
+        row1.addWidget(btn_summary)
+
+        row3 = QHBoxLayout()
+        row3.addWidget(QLabel("输出目录"))
+        row3.addWidget(self.out_dir_edit)
+        row3.addWidget(btn_out)
+
+        g_layout.addLayout(row1)
+        g_layout.addLayout(row3)
+
+        layout.addWidget(group)
+
+    # =========================================================
+    # condition
+    # =========================================================
+    def build_condition_group(self, layout):
+
+        group = QGroupBox("条件输入")
+
+        g_layout = QVBoxLayout(group)
+
+        # =====================================================
+        # grid
+        # =====================================================
+        self.grid_y_spin = QSpinBox()
+        self.grid_z_spin = QSpinBox()
+        self.grid_x_spin = QSpinBox()
+
+        self.grid_y_spin.setValue(2)
+        self.grid_z_spin.setValue(2)
+        self.grid_x_spin.setValue(2)
+
+        grid_row = QHBoxLayout()
+
+        grid_row.addWidget(QLabel("GRID_SHAPE"))
+
+        grid_row.addWidget(QLabel("Y"))
+        grid_row.addWidget(self.grid_y_spin)
+
+        grid_row.addWidget(QLabel("Z"))
+        grid_row.addWidget(self.grid_z_spin)
+
+        grid_row.addWidget(QLabel("X"))
+        grid_row.addWidget(self.grid_x_spin)
+
+        btn_refresh = QPushButton("刷新 Manual Patch 表格")
+
+        btn_refresh.clicked.connect(
+            self.build_manual_patch_editor
+        )
+
+        grid_row.addWidget(btn_refresh)
+
+        g_layout.addLayout(grid_row)
+
+        # =====================================================
+        # mode
+        # =====================================================
+        self.condition_mode_combo = QComboBox()
+
+        self.condition_mode_combo.addItems([
+            "uniform_porosity",
+            "manual_user",
+        ])
+
+        self.condition_mode_combo.currentTextChanged.connect(
+            self.on_condition_mode_changed
+        )
+
+        self.create_form_row(
+            "CONDITION_INPUT_MODE",
+            self.condition_mode_combo,
+            g_layout
+        )
+
+        # =====================================================
+        # uniform
+        # =====================================================
+        self.uniform_group = QGroupBox(
+            "uniform_porosity 模式"
+        )
+
+        uniform_layout = QVBoxLayout(
+            self.uniform_group
+        )
+
+        self.target_porosity_spin = QDoubleSpinBox()
+        self.target_porosity_spin.setDecimals(4)
+        self.target_porosity_spin.setRange(0, 1)
+        self.target_porosity_spin.setValue(0.30)
+
+        self.target_tau_spin = QDoubleSpinBox()
+        self.target_tau_spin.setDecimals(4)
+        self.target_tau_spin.setRange(0, 9999)
+        self.target_tau_spin.setValue(3.30)
+
+        self.create_form_row(
+            "TARGET_PATCH_POROSITY",
+            self.target_porosity_spin,
+            uniform_layout
+        )
+
+        self.create_form_row(
+            "TARGET_PATCH_TAU_Z",
+            self.target_tau_spin,
+            uniform_layout
+        )
+
+        g_layout.addWidget(
+            self.uniform_group
+        )
+
+        # =====================================================
+        # manual
+        # =====================================================
+        self.manual_group = QGroupBox(
+            "manual_user 模式"
+        )
+
+        manual_layout = QVBoxLayout(
+            self.manual_group
+        )
+
+        tip = QLabel(
+            "请为每个 patch 填写 porosity 与 tau_z"
+        )
+
+        tip.setStyleSheet("""
+            color:#4f8cff;
+            padding:6px;
+        """)
+
+        manual_layout.addWidget(tip)
+
+        self.manual_grid_layout = QGridLayout()
+
+        manual_layout.addLayout(
+            self.manual_grid_layout
+        )
+
+        g_layout.addWidget(
+            self.manual_group
+        )
+
+        layout.addWidget(group)
+
+        self.build_manual_patch_editor()
+
+        self.on_condition_mode_changed()
+
+    # =========================================================
+    # generation
+    # =========================================================
+    def build_generation_group(self, layout):
+
+        group = QGroupBox("生成参数")
+
+        g_layout = QVBoxLayout(group)
+
+        self.device_combo = QComboBox()
+        self.device_combo.addItems(["cuda", "cpu"])
+
+        self.patch_size_spin = QSpinBox()
+        self.patch_size_spin.setMaximum(1024)
+        self.patch_size_spin.setValue(128)
+
+        self.voxel_y_spin = QDoubleSpinBox()
+        self.voxel_y_spin.setDecimals(6)
+        self.voxel_y_spin.setValue(0.0315)
+
+        self.voxel_z_spin = QDoubleSpinBox()
+        self.voxel_z_spin.setDecimals(6)
+        self.voxel_z_spin.setValue(0.02791)
+
+        self.voxel_x_spin = QDoubleSpinBox()
+        self.voxel_x_spin.setDecimals(6)
+        self.voxel_x_spin.setValue(0.02791)
+
+        self.remove_small_checkbox = QCheckBox()
+        self.remove_small_checkbox.setChecked(True)
+
+        self.min_pore_spin = QSpinBox()
+        self.min_pore_spin.setValue(10)
+
+        self.tau_nonperc_spin = QDoubleSpinBox()
+        self.tau_nonperc_spin.setMaximum(1e9)
+        self.tau_nonperc_spin.setValue(1e6)
+
+        self.suppress_checkbox = QCheckBox()
+        self.suppress_checkbox.setChecked(True)
+
+        self.create_form_row(
+            "DEVICE",
+            self.device_combo,
+            g_layout
+        )
+
+        self.create_form_row(
+            "PATCH_SIZE",
+            self.patch_size_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "VOXEL_SIZE_Y",
+            self.voxel_y_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "VOXEL_SIZE_Z",
+            self.voxel_z_spin,
+            g_layout
+        )
+
+        self.create_form_row(
+            "VOXEL_SIZE_X",
+            self.voxel_x_spin,
+            g_layout
+        )
+
+        layout.addWidget(group)
+
+    # =========================================================
+    # manual patch
+    # =========================================================
+    def build_manual_patch_editor(self):
+
+        while self.manual_grid_layout.count():
+
+            item = self.manual_grid_layout.takeAt(0)
+
+            widget = item.widget()
+
+            if widget:
+                widget.deleteLater()
+
+        self.manual_patch_widgets = []
+
+        gy = self.grid_y_spin.value()
+        gz = self.grid_z_spin.value()
+        gx = self.grid_x_spin.value()
+
+        row = 0
+
+        for iy in range(gy):
+            for iz in range(gz):
+                for ix in range(gx):
+
+                    label = QLabel(
+                        f"Patch [{iy}, {iz}, {ix}]"
+                    )
+
+                    porosity_spin = QDoubleSpinBox()
+                    porosity_spin.setDecimals(4)
+                    porosity_spin.setRange(0, 1)
+                    porosity_spin.setValue(0.30)
+
+                    tau_spin = QDoubleSpinBox()
+                    tau_spin.setDecimals(4)
+                    tau_spin.setRange(0, 9999)
+                    tau_spin.setValue(3.30)
+
+                    self.manual_grid_layout.addWidget(
+                        label,
+                        row,
+                        0
+                    )
+
+                    self.manual_grid_layout.addWidget(
+                        QLabel("porosity"),
+                        row,
+                        1
+                    )
+
+                    self.manual_grid_layout.addWidget(
+                        porosity_spin,
+                        row,
+                        2
+                    )
+
+                    self.manual_grid_layout.addWidget(
+                        QLabel("tau_z"),
+                        row,
+                        3
+                    )
+
+                    self.manual_grid_layout.addWidget(
+                        tau_spin,
+                        row,
+                        4
+                    )
+
+                    self.manual_patch_widgets.append({
+                        "grid_index": [iy, iz, ix],
+                        "porosity": porosity_spin,
+                        "tau_z": tau_spin,
+                    })
+
+                    row += 1
+
+    # =========================================================
+    # condition mode
+    # =========================================================
+    def on_condition_mode_changed(self):
+
+        mode = self.condition_mode_combo.currentText()
+
+        if mode == "uniform_porosity":
+
+            self.uniform_group.setVisible(True)
+            self.manual_group.setVisible(False)
+
+        else:
+
+            self.uniform_group.setVisible(False)
+            self.manual_group.setVisible(True)
+
+    # =========================================================
+    # model
+    # =========================================================
     def load_models(self):
-        """从接口加载模型列表"""
+
         try:
-            response = requests.get(f"{API_BASE}/models/versions")
+
+            response = requests.get(
+                f"{API_BASE}/models/versions"
+            )
+
             data = response.json()
 
-            #  新接口返回格式：{"vae_models": [...], "ldm_models": [...]}
-            vae_models = data.get("vae_models", [])
-            ldm_models = data.get("ldm_models", [])
+            vae_models = data.get(
+                "vae_models",
+                []
+            )
 
-            print(f"[OK] 加载到 {len(vae_models)} 个VAE模型, {len(ldm_models)} 个LDM模型")
+            ldm_models = data.get(
+                "ldm_models",
+                []
+            )
 
-            self.model_data = {
-                "vae_models": vae_models,
-                "ldm_models": ldm_models,
-            }
-
-            #  填充 VAE 下拉框（显示文件名 + 时间）
             self.vae_combo.clear()
-            for model in vae_models:
-                display_text = f"{model['file_name']} ({model['create_time']})"
-                self.vae_combo.addItem(display_text, model["full_path"])  # 保存完整路径
-
-            #  填充 LDM 下拉框
             self.ldm_combo.clear()
-            for model in ldm_models:
-                display_text = f"{model['file_name']} ({model['create_time']})"
-                self.ldm_combo.addItem(display_text, model["full_path"])  # 保存完整路径
 
-            #  默认选中最新的模型
+            for model in vae_models:
+
+                text = (
+                    f"{model['file_name']} "
+                    f"({model['create_time']})"
+                )
+
+                self.vae_combo.addItem(
+                    text,
+                    model["full_path"]
+                )
+
+            for model in ldm_models:
+
+                text = (
+                    f"{model['file_name']} "
+                    f"({model['create_time']})"
+                )
+
+                self.ldm_combo.addItem(
+                    text,
+                    model["full_path"]
+                )
+
             if vae_models:
                 self.vae_combo.setCurrentIndex(0)
+
             if ldm_models:
                 self.ldm_combo.setCurrentIndex(0)
 
-            self.update_path_label()
+            self.update_model_label()
 
         except Exception as e:
-            print(f"[错误] 加载模型失败: {e}")
-            self.vae_combo.addItem("无可用模型", "")
-            self.ldm_combo.addItem("无可用模型", "")
 
-    # ============================================
-    #  DEVICE 选择变化（新增）
-    # ============================================
-    def on_device_changed(self):
-        """设备选择变化时的处理（可选）"""
-        print(f"[DEVICE] 当前选择: {self.device_combo.currentText()}")
+            QMessageBox.warning(
+                self,
+                "错误",
+                str(e)
+            )
 
-    # ============================================
-    #  NUM_SAMPLES 变化（新增）
-    # ============================================
-    def on_samples_changed(self):
-        """采样数变化时的处理（可选）"""
-        print(f"[NUM_SAMPLES] 当前值: {self.samples_spin.value()}")
-
-    # ============================================
-    #  VAE 选择变化
-    # ============================================
     def on_vae_changed(self):
-        """VAE模型选择变化时更新路径显示"""
-        idx = self.vae_combo.currentIndex()
-        if idx >= 0:
-            self.selected_vae_path = self.vae_combo.currentData()  # 获取完整路径
-        self.update_path_label()
 
-    # ============================================
-    #  LDM 选择变化
-    # ============================================
+        self.selected_vae_path = \
+            self.vae_combo.currentData()
+
+        self.update_model_label()
+
     def on_ldm_changed(self):
-        """LDM模型选择变化时更新路径显示"""
-        idx = self.ldm_combo.currentIndex()
-        if idx >= 0:
-            self.selected_ldm_path = self.ldm_combo.currentData()  # 获取完整路径
-        self.update_path_label()
 
-    # ============================================
-    #  更新路径显示
-    # ============================================
-    def update_path_label(self):
-        """在界面上显示当前选中的模型路径"""
-        vae_name = self.vae_combo.currentText().split(" (")[0] if self.vae_combo.currentText() else "未选择"
-        ldm_name = self.ldm_combo.currentText().split(" (")[0] if self.ldm_combo.currentText() else "未选择"
+        self.selected_ldm_path = \
+            self.ldm_combo.currentData()
 
-        self.path_label.setText(
+        self.update_model_label()
+
+    def update_model_label(self):
+
+        vae_name = self.vae_combo.currentText()
+        ldm_name = self.ldm_combo.currentText()
+
+        self.model_label.setText(
             f"VAE: {vae_name}\n"
             f"LDM: {ldm_name}"
         )
 
-    # ============================================
-    #  获取选中的模型路径（ 关键方法）
-    # ============================================
-    def get_selected_models(self):
-        """
-         获取用户选择的模型完整路径
-        返回: {
-            "vae_path": "完整路径/xxx.ckpt",
-            "ldm_path": "完整路径/xxx.ckpt",
-            "vae_name": "文件名.ckpt",
-            "ldm_name": "文件名.ckpt"
-            "设备"
-            "采样数"
-        }
-        """
-        return {
-            "vae_path": self.selected_vae_path,
-            "ldm_path": self.selected_ldm_path,
-            "vae_name": self.vae_combo.currentText().split(" (")[0] if self.vae_combo.currentText() else None,
-            "ldm_name": self.ldm_combo.currentText().split(" (")[0] if self.ldm_combo.currentText() else None,
-            "device": self.device_combo.currentText(),
-            "num_samples": self.samples_spin.value(),
-        }
+    # =========================================================
+    # select
+    # =========================================================
+    def select_summary_json(self):
 
-    # ============================================
-    # 开始生成（：校验 + 提交 + 弹窗 + 跳转）
-    # ============================================
-    def start_generate(self):
-        models = self.get_selected_models()
-
-        #  1.检查是否选择了模型
-        if not models["vae_path"] or not models["ldm_path"]:
-            self.main_window.show_message("错误", "请先选择VAE和LDM模型！")
-            return
-
-        # ============================================
-        # 2. 提交任务到后台（ 新增模型路径）
-        # ============================================
-        payload = {
-            "porosity": self.porosity_input.value(),
-            "tau_z": self.tau_input.value(),
-            "surface_area": self.surface_input.value(),
-            #  新增：模型路径
-            "vae_path": models["vae_path"],
-            "ldm_path": models["ldm_path"],
-            # 新增：设备和采样数
-            "device": models["device"],
-            "num_samples": models["num_samples"],
-        }
-
-        result = create_task(
-            "/stage4/generate_structure_from_condition",
-            payload,
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择 summary json",
+            "",
+            "JSON (*.json)"
         )
 
-        if "task_id" not in result:
+        if path:
+            self.summary_json_edit.setText(path)
+
+    def select_metrics_csv(self):
+
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择 metrics csv",
+            "",
+            "CSV (*.csv)"
+        )
+
+        if path:
+            self.metrics_csv_edit.setText(path)
+
+    def select_out_dir(self):
+
+        path = QFileDialog.getExistingDirectory(
+            self,
+            "选择输出目录"
+        )
+
+        if path:
+            self.out_dir_edit.setText(path)
+
+    # =========================================================
+    # payload
+    # =========================================================
+    def build_manual_conditions(self):
+
+        result = []
+
+        for item in self.manual_patch_widgets:
+
+            result.append({
+                "grid_index":
+                    item["grid_index"],
+
+                "porosity":
+                    item["porosity"].value(),
+
+                "tau_z":
+                    item["tau_z"].value(),
+            })
+
+        return result
+
+    # =========================================================
+    # task
+    # =========================================================
+    def start_task(self):
+
+        if not self.out_dir_edit.text().strip():
+
             QMessageBox.warning(
                 self,
                 "错误",
-                str(result)
+                "请选择输出目录"
             )
+
             return
 
-        self.task_id = result["task_id"]
+        try:
 
-        # ============================================
-        # 3. 弹窗提示 + 跳转到任务中心
-        # ============================================
-        msg = QMessageBox(self)
-        msg.setWindowTitle("任务已提交")
-        msg.setText("Stage4 生成任务已提交！")
-        msg.setInformativeText(
-            "任务正在后台运行，请前往「历史任务中心」查看进度和结果。"
+            threshold_offsets = json.loads(
+                json.dumps(
+                    [-0.04, -0.03, -0.02, -0.01,
+                     0.0,
+                     0.01, 0.02, 0.03, 0.04],
+                    indent=2
+                )
+            )
+
+            postprocess_configs = json.loads(
+                json.dumps([
+                    {
+                        "name": "raw",
+                        "mode": "none",
+                    },
+                    {
+                        "name": "erode1",
+                        "mode": "erode",
+                        "iters": 1,
+                    },
+                    {
+                        "name": "open1",
+                        "mode": "open",
+                        "iters": 1,
+                    },
+                    {
+                        "name": "erode1_dilate1",
+                        "mode": "erode_dilate",
+                        "erode_iters": 1,
+                        "dilate_iters": 1,
+                    },
+                ], indent=2)
+            )
+
+            cheap_weights = json.loads(
+                json.dumps({
+                    "porosity": 4.0,
+                }, indent=2)
+            )
+
+            final_weights = json.loads(
+                json.dumps({
+                    "porosity": 4.0,
+                    "tau_z": 5.0,
+                    "deff_z": 0.5,
+                }, indent=2)
+            )
+
+        except Exception as e:
+
+            QMessageBox.warning(
+                self,
+                "JSON错误",
+                str(e)
+            )
+
+            return
+
+        payload = {
+
+            # =================================================
+            # path
+            # =================================================
+            "summary_json_path":
+                self.summary_json_edit.text(),
+
+            "train_metrics_table_path":
+                self.default_metrics_csv,
+
+            "ldm_ckpt_path":
+                self.selected_ldm_path,
+
+            "vae_ckpt_path":
+                self.selected_vae_path,
+
+            "out_dir":
+                self.out_dir_edit.text(),
+
+            # =================================================
+            # device
+            # =================================================
+            "device":
+                self.device_combo.currentText(),
+
+            # =================================================
+            # patch
+            # =================================================
+            "patch_size":
+                self.patch_size_spin.value(),
+
+            "overlap":
+                32,
+
+            "grid_shape": [
+                self.grid_y_spin.value(),
+                self.grid_z_spin.value(),
+                self.grid_x_spin.value(),
+            ],
+
+            # =================================================
+            # condition
+            # =================================================
+            "condition_input_mode":
+                self.condition_mode_combo.currentText(),
+
+            "target_patch_porosity":
+                self.target_porosity_spin.value(),
+
+            "target_patch_tau_z":
+                self.target_tau_spin.value(),
+
+            "manual_patch_conditions":
+                self.build_manual_conditions(),
+
+            # =================================================
+            # auto
+            # =================================================
+            "auto_surface_mode":
+                "nearest_training_porosity_tau",
+
+            "auto_deff_mode":
+                "porosity_over_tau",
+
+            # =================================================
+            # generation
+            # =================================================
+            "num_samples_per_patch":
+                32,
+
+            "pore_value":
+                0,
+
+            "solid_value":
+                1,
+
+            # =================================================
+            # voxel
+            # =================================================
+            "voxel_size_y":
+                self.voxel_y_spin.value(),
+
+            "voxel_size_z":
+                self.voxel_z_spin.value(),
+
+            "voxel_size_x":
+                self.voxel_x_spin.value(),
+
+            # =================================================
+            # clean
+            # =================================================
+            "remove_small_pore_components":
+                True,
+
+            "min_pore_component_size":
+                10,
+
+            "postprocess_configs":
+                postprocess_configs,
+
+            # =================================================
+            # threshold
+            # =================================================
+            "use_adaptive_threshold_for_porosity":
+                True,
+
+            "adaptive_threshold_max_iters":
+                25,
+
+            "adaptive_threshold_tol":
+                1e-4,
+
+            "threshold_offsets":
+                threshold_offsets,
+
+            # =================================================
+            # score
+            # =================================================
+            "cheap_error_weights":
+                cheap_weights,
+
+            "final_error_weights":
+                final_weights,
+
+            "use_std_normalized_error":
+                True,
+
+            "topology_penalty_weight":
+                1.0,
+
+            "min_solid_component_count_soft":
+                10,
+
+            "exact_eval_topk_per_candidate":
+                3,
+
+            # =================================================
+            # ood
+            # =================================================
+            "warn_if_target_ood":
+                True,
+
+            "clip_normalized_condition_to_train_range":
+                False,
+
+            # =================================================
+            # tau
+            # =================================================
+            "tau_nonperc_value":
+                1e6,
+
+            "suppress_taufactor_output":
+                True,
+
+            # =================================================
+            # slice
+            # =================================================
+            "save_all_y_zx_slice_png":
+                True,
+
+            "slice_color_style":
+                "black_yellow",
+
+            "slice_show_axis":
+                False,
+
+            "slice_dpi":
+                200,
+        }
+
+        result = create_task(
+            "/stage4/generate-specific-volume",
+            payload
         )
-        msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-        msg.setDefaultButton(QMessageBox.Ok)
 
-        go_btn = msg.addButton("前往任务中心", QMessageBox.ActionRole)
-        ret = msg.exec_()
+        msg = QMessageBox(self)
 
+        msg.setWindowTitle("任务已提交")
+
+        msg.setText(
+            f"Stage4 任务已提交\n{result}"
+        )
+
+        msg.setInformativeText(
+            "任务正在后台运行，请前往历史任务中心查看"
+        )
+
+        msg.setStandardButtons(
+            QMessageBox.Ok | QMessageBox.Cancel
+        )
+
+        go_btn = msg.addButton(
+            "前往任务中心",
+            QMessageBox.ActionRole
+        )
+
+        ret = msg.exec()
+
+        # 6. 跳转到任务中心（无论点 OK 还是「前往任务中心」按钮）
         if ret == QMessageBox.Ok or msg.clickedButton() == go_btn:
             self.main_window.menu.setCurrentRow(5)
             self.main_window.history_page.refresh_task_list()
 
-    def refresh_task(self):
+    # =========================================================
+    # reset
+    # =========================================================
+    def reset_params(self):
 
-        if not self.task_id:
-            return
+        self.device_combo.setCurrentText("cuda")
 
-        task = query_task(
-            self.task_id
+        self.patch_size_spin.setValue(128)
+
+        self.overlap_spin.setValue(32)
+
+        self.grid_y_spin.setValue(2)
+        self.grid_z_spin.setValue(2)
+        self.grid_x_spin.setValue(2)
+
+        self.condition_mode_combo.setCurrentText(
+            "uniform_porosity"
         )
 
-        status = task.get("status")
+        self.target_porosity_spin.setValue(0.30)
 
-        progress = task.get(
-            "progress",
-            0,
+        self.target_tau_spin.setValue(3.30)
+
+        self.num_samples_spin.setValue(32)
+
+        self.remove_small_checkbox.setChecked(True)
+
+        self.min_pore_spin.setValue(10)
+
+        self.adaptive_checkbox.setChecked(True)
+
+        self.adaptive_iter_spin.setValue(25)
+
+        self.adaptive_tol_spin.setValue(1e-4)
+
+        self.topology_spin.setValue(1.0)
+
+        self.min_solid_spin.setValue(10)
+
+        self.topk_spin.setValue(3)
+
+        self.warn_checkbox.setChecked(True)
+
+        self.clip_checkbox.setChecked(False)
+
+        self.save_slice_checkbox.setChecked(True)
+
+        self.slice_style_combo.setCurrentText(
+            "black_yellow"
         )
 
-        logs = task.get(
-            "logs",
-            [],
+        self.slice_axis_checkbox.setChecked(False)
+
+        self.slice_dpi_spin.setValue(200)
+
+        self.build_manual_patch_editor()
+
+        QMessageBox.information(
+            self,
+            "提示",
+            "参数已恢复默认"
         )
-
-        self.progress.setValue(
-            int(progress)
-        )
-
-        self.log_text.setPlainText(
-            "\n".join(logs[-200:])
-        )
-
-        if status == "finished":
-
-            self.timer.stop()
-
-            QMessageBox.information(
-                self,
-                "完成",
-                "Stage4 生成完成"
-            )
-
-        elif status == "failed":
-
-            self.timer.stop()
-
-            QMessageBox.warning(
-                self,
-                "失败",
-                task.get("error", "")
-            )

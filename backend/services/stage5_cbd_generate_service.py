@@ -31,6 +31,7 @@ logger.setLevel(logging.INFO)
 def generate_cbd_service(
     task_id: str,
     input_volume_path: str,
+    out_dir: str,
     target_cbd_vol_frac: float,
     w_um: float = None,
 
@@ -87,7 +88,7 @@ def generate_cbd_service(
     )
 
     out_dir = os.path.join(
-        task_root_dir,
+        out_dir,
         "out_put",
         "cbd_gen_result_best_sample",
         "three_phase"

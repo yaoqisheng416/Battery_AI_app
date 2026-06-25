@@ -43,7 +43,7 @@ COND_TO_METRIC_KEY = {
 # ============================================================
 # logger
 # ============================================================
-logger = logging.getLogger("stage5_build_real_large_volume_service")
+logger = logging.getLogger("stage4_build_real_large_volume_service")
 
 if not logger.handlers:
     handler = logging.StreamHandler()

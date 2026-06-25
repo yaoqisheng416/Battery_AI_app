@@ -226,6 +226,7 @@ class cbdGenerateRequest(BaseModel):
     # ex: electrode_twin/generated_results/run_007
     task_id: Optional[str] = None
     input_volume_path: str
+    out_dir: str
 
     # ex: 0.05
     target_cbd_vol_frac: float
