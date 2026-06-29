@@ -483,7 +483,7 @@ class Stage1Page(QWidget):
     def _on_finished(self, ckpt_path):
         self.start_btn.setEnabled(True)
         self.progress.setValue(100)
-        self.log_text.append(f"✅ 训练完成！")
+        self.log_text.append(f" 训练完成！")
         self.log_text.append(f"Checkpoint: {ckpt_path}")
         QMessageBox.information(
             self, "训练完成",
@@ -493,7 +493,7 @@ class Stage1Page(QWidget):
     def _on_failed(self, error_msg):
         self.start_btn.setEnabled(True)
         self.progress.setValue(0)
-        self.log_text.append(f"❌ {error_msg}")
+        self.log_text.append(f" {error_msg}")
         QMessageBox.warning(self, "训练失败", error_msg)
 
     def refresh_task(self):
