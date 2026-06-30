@@ -27,25 +27,27 @@ import json
 import socket
 import time
 import subprocess
+import multiprocessing
 import numpy as np
 from scipy import ndimage as ndi
 import tifffile
 
 # ============================================
 # 单实例锁 — 防止重复启动
+# 锁 socket 会在整个应用生命周期内保持存活
 # ============================================
 
-LOCK_PORT = 54322
+LOCK_PORT = 54321
 
 
-def already_running():
-    """检查是否已有实例在运行"""
+def acquire_lock():
+    """获取单实例锁，成功返回 socket（调用方必须保持引用），失败返回 None"""
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         s.bind(("127.0.0.1", LOCK_PORT))
-        return False
+        return s
     except socket.error:
-        return True
+        return None
 
 
 from PySide6.QtCore import Qt, QTimer
@@ -53,7 +55,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFileDialog, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox,
     QSlider, QTextEdit, QGroupBox, QMessageBox, QCheckBox, QDialog, QScrollArea,
-    QStackedWidget, QTabWidget
+    QStackedWidget, QTabWidget, QProgressBar
 )
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -1176,7 +1178,7 @@ class OpenMesoCellWindow(QMainWindow):
         self.update_psd_preview()
         self.update_view()
 
-        # 自动启动后端 API 服务器，然后加载深度学习页面
+        # 检测后端 API 服务器状态（由 main() 预先启动），然后加载深度学习页面
         self._start_api_server()
         self.dl_loading = True
         QTimer.singleShot(500, self._init_dl_tabs)
@@ -1420,7 +1422,9 @@ class OpenMesoCellWindow(QMainWindow):
     # ======================== 后端 API 服务器管理 ========================
 
     def _start_api_server(self):
-        """启动后端 API 服务器（如未运行）。"""
+        """启动后端 API 服务器（如未运行）。
+        使用 multiprocessing.Process 而非 subprocess.Popen，
+        确保 PyInstaller 打包后正常工作。"""
         self.api_ready = False  # 标志位：API 是否可用
 
         # 先检查端口是否已被占用（服务器可能已在运行）
@@ -1432,20 +1436,8 @@ class OpenMesoCellWindow(QMainWindow):
             self.api_ready = True
             return
 
-        api_script = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "backend", "api_server.py"
-        )
-        python_exe = sys.executable
-        project_root = os.path.dirname(os.path.abspath(__file__))
-
         try:
-            self.api_process = subprocess.Popen(
-                [python_exe, api_script],
-                cwd=project_root,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            self.api_process = start_api_process()
             # 等待服务器就绪（最多 30 秒）
             for _ in range(60):
                 time.sleep(0.5)
@@ -1478,27 +1470,11 @@ class OpenMesoCellWindow(QMainWindow):
             )
 
     def _stop_api_server(self):
-        """关闭后端 API 子进程（含子进程树）。"""
+        """关闭后端 API 子进程。"""
         if self.api_process is not None:
-            try:
-                pid = self.api_process.pid
-                # Windows: 使用 taskkill /T 杀死整个进程树
-                if sys.platform == "win32" and pid:
-                    subprocess.run(
-                        ['taskkill', '/F', '/T', '/PID', str(pid)],
-                        capture_output=True
-                    )
-                else:
-                    self.api_process.terminate()
-                    try:
-                        self.api_process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        self.api_process.kill()
-                self.log("后端 API 服务器已停止")
-            except Exception as e:
-                self.log(f"停止 API 服务器时出错: {e}")
-            finally:
-                self.api_process = None
+            kill_api_process(self.api_process)
+            self.log("后端 API 服务器已停止")
+            self.api_process = None
 
     def closeEvent(self, event):
         """窗口关闭时清理后端子进程。"""
@@ -1882,9 +1858,134 @@ class OpenMesoCellWindow(QMainWindow):
             self.log(f"Mesh export failed: {e}")
 
 
+# ============================================================
+# 启动 Splash — 与 main.py 保持一致
+# ============================================================
+
+class SplashScreen(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("OpenMesoCell")
+        self.setFixedSize(420, 220)
+        self.setWindowFlags(
+            Qt.WindowStaysOnTopHint |
+            Qt.CustomizeWindowHint
+        )
+        layout = QVBoxLayout()
+        self.label = QLabel("正在启动 OpenMesoCell...")
+        self.label.setAlignment(Qt.AlignCenter)
+        self.label.setStyleSheet("""
+            font-size: 18px;
+            font-weight: bold;
+        """)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        layout.addStretch()
+        layout.addWidget(self.label)
+        layout.addWidget(self.progress)
+        layout.addStretch()
+        self.setLayout(layout)
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.fake_progress)
+        self.current = 0
+        self.timer.start(120)
+
+    def fake_progress(self):
+        if self.current < 90:
+            self.current += 1
+            self.progress.setValue(self.current)
+
+    def finish(self):
+        self.timer.stop()
+        self.progress.setValue(100)
+        self.label.setText("启动完成")
+
+
+# ============================================================
+# API 服务器管理（模块级辅助函数）
+# ============================================================
+
+def run_api_server():
+    """在子进程中启动 FastAPI 后端（供 multiprocessing.Process 调用）"""
+    from backend.api_server import start_server
+    start_server()
+
+
+def start_api_process():
+    """启动 API 子进程（multiprocessing），返回 Process 对象。
+
+    使用 multiprocessing.Process 而非 subprocess.Popen 的原因：
+    PyInstaller 打包后 sys.executable 是 .exe 本身而非 python，
+    subprocess.Popen([sys.executable, script]) 会重新启动 GUI 主程序，
+    而非 API 服务器。multiprocessing.Process 直接 import 模块运行，
+    不依赖外部 python 解释器或脚本文件路径。
+    """
+    try:
+        proc = multiprocessing.Process(
+            target=run_api_server,
+            daemon=True,
+            name="api-server",
+        )
+        proc.start()
+        print(f"[OK] API 进程已启动 (pid={proc.pid})")
+        return proc
+    except Exception as e:
+        print(f"启动 API 进程失败: {e}")
+        return None
+
+
+def wait_for_api_port(timeout=30, app=None):
+    """轮询等待 API 端口就绪，过程中保持 UI 响应。
+
+    app: 可选的 QApplication 实例，传入则会在等待期间处理 UI 事件
+         （保持 splash 进度条动画）。
+    """
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            r = sock.connect_ex(('127.0.0.1', 8001))
+            sock.close()
+            if r == 0:
+                print("[OK] API 端口已就绪")
+                return True
+        except Exception as e:
+            print("等待 API:", e)
+        # 保持 UI 响应（splash 进度条动画）
+        if app is not None:
+            app.processEvents()
+        time.sleep(0.5)
+    return False
+
+
+def kill_api_process(proc):
+    """终止 API 子进程（适配 multiprocessing.Process）"""
+    if proc is None:
+        return
+    try:
+        if proc.is_alive():
+            proc.terminate()
+            proc.join(timeout=5)
+            if proc.is_alive():
+                proc.kill()
+                proc.join(timeout=2)
+        print("API 进程已关闭")
+    except Exception as e:
+        print(f"关闭 API 进程时出错: {e}")
+
+
+# ============================================================
+# 主入口 — 与 main.py 保持一致的启动流程
+# ============================================================
+
 def main():
-    # 单实例检查
-    if already_running():
+    # ---- PyInstaller 打包支持（Windows 必须） ----
+    multiprocessing.freeze_support()
+
+    # ---- 单实例锁（socket 保持存活直到进程退出） ----
+    lock_socket = acquire_lock()
+    if lock_socket is None:
         app = QApplication(sys.argv)
         QMessageBox.warning(
             None,
@@ -1893,12 +1994,78 @@ def main():
         )
         sys.exit(0)
 
-    app = QApplication(sys.argv)
-    win = OpenMesoCellWindow()
-    win.show()
+    print("=" * 50)
+    print("开始启动应用...")
+    print("=" * 50)
 
-    # 确保关闭时清理所有后台进程
-    app.aboutToQuit.connect(win.cleanup_on_exit)
+    app = QApplication(sys.argv)
+
+    # ---- Splash 屏幕 ----
+    splash = SplashScreen()
+    splash.show()
+    app.processEvents()
+
+    # ---- 启动 API ----
+    splash.label.setText("正在启动后端 API...")
+    splash.repaint()
+    app.processEvents()
+
+    api_process = start_api_process()
+
+    # ---- 等待 API 就绪（传入 app 以保持进度条动画） ----
+    splash.label.setText("程序启动中（请稍等）...")
+    splash.repaint()
+    app.processEvents()
+
+    print("等待 API 完全初始化...")
+
+    if not wait_for_api_port(timeout=300, app=app):
+        # 1. 关闭 Splash 进度条窗口
+        splash.close()
+        app.processEvents()
+
+        # 2. 终止 API 子进程
+        kill_api_process(api_process)
+
+        # 3. 弹窗提示用户
+        QMessageBox.critical(
+            None,
+            "错误",
+            "后端 API 初始化失败\n\n"
+            "深度学习功能将无法使用。\n"
+            "请关闭本应用后重新启动。\n\n"
+            "如问题持续，请检查后台是否已有残留进程占用端口 8001。"
+        )
+
+        # 4. 彻底退出：先尝试 Qt 正常退出，再用 os._exit() 兜底
+        #    （PyInstaller 打包后 sys.exit() 可能被 bootloader 吞掉）
+        try:
+            app.quit()
+            sys.exit(1)
+        finally:
+            os._exit(1)
+
+    # ---- API 就绪，创建主窗口 ----
+    splash.label.setText("启动界面...")
+    splash.progress.setValue(95)
+    splash.repaint()
+    app.processEvents()
+
+    window = OpenMesoCellWindow()
+    window.show()
+    splash.finish()
+    splash.close()
+
+    # ---- 清理 ----
+    def cleanup():
+        kill_api_process(api_process)
+        window._stop_api_server()
+
+    app.aboutToQuit.connect(cleanup)
+
+    print("=" * 50)
+    print("GUI 已启动")
+    print("=" * 50)
 
     sys.exit(app.exec())
 
