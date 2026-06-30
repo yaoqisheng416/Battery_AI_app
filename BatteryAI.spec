@@ -10,7 +10,7 @@ import sys
 block_cipher = None
 
 # =========================================
-# ×Ô¶¯ÊÕ¼¯ torch / fastapi µÈÒÀÀµ
+# ï¿½Ô¶ï¿½ï¿½Õ¼ï¿½ torch / fastapi ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 # =========================================
 
 torch_datas, torch_binaries, torch_hiddenimports = collect_all('torch')
@@ -27,7 +27,7 @@ skimage_datas, skimage_binaries, skimage_hiddenimports = collect_all('skimage')
 
 
 a = Analysis(
-    ['main.py'],
+    ['OpenMesoCell V0.1.py'],
 
     pathex=[],
 
@@ -107,7 +107,7 @@ exe = EXE(
 
     exclude_binaries=True,
 
-    name='BatteryAI',
+    name='OpenMesoCell V0.1',
 
     debug=False,
 
