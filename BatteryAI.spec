@@ -135,5 +135,5 @@ coll = COLLECT(
 
     upx_exclude=[],
 
-    name='BatteryAI'
+    name='OpenMesoCell V0.1'
 )
