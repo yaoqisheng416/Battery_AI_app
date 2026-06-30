@@ -44,6 +44,10 @@ a = Analysis(
         ('backend', 'backend'),
         ('pages', 'pages'),
         ('workspace', 'workspace'),
+        # 项目根目录下被动态导入的模块（pages/backend 通过 __import__ 或
+        # from xxx import 引用，PyInstaller 静态分析追踪不到，需显式声明）
+        ('api_client.py', '.'),
+        ('config.py', '.'),
         ('latent_diffusion.py', '.'),
         ('vaemodule.py', '.'),
         *torch_datas,
