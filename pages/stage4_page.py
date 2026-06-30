@@ -68,22 +68,6 @@ class Stage4Page(QWidget):
         root_layout = QVBoxLayout(self)
 
         # =====================================================
-        # title
-        # =====================================================
-        title = QLabel(
-            "Stage4 生成特定体积"
-        )
-
-        title.setStyleSheet("""
-        font-size:24px;
-        font-weight:bold;
-        color:white;
-        padding:10px;
-        """)
-
-        root_layout.addWidget(title)
-
-        # =====================================================
         # scroll
         # =====================================================
         scroll = QScrollArea()
@@ -102,22 +86,10 @@ class Stage4Page(QWidget):
         # tip
         # =====================================================
         tip = QLabel(
-            "💡 根据用户输入的孔隙率 + 迂曲度条件，生成并拼接大体积 AM-pore 数字孪生结构, 并保存最终体数据沿 Y 方向的全部 ZX 切片可视化图"
+            "根据用户输入的孔隙率 + 迂曲度条件，生成并拼接大体积 AM-pore 数字孪生结构，"
+            "并保存最终体数据沿 Y 方向的全部 ZX 切片可视化图。"
         )
-
         tip.setWordWrap(True)
-
-        tip.setStyleSheet("""
-            QLabel {
-                font-size: 12px;
-                color: #4f8cff;
-                padding: 15px;
-                background: #25262b;
-                border-radius: 10px;
-                border: 2px solid #4f8cff;
-            }
-        """)
-
         layout.addWidget(tip)
 
         # =====================================================
@@ -149,21 +121,8 @@ class Stage4Page(QWidget):
             "开始执行 Stage4 生成特定体积"
         )
 
-        btn_run.setMinimumHeight(50)
-
-        btn_run.setStyleSheet("""
-            QPushButton{
-                background:#4f8cff;
-                color:white;
-                border-radius:8px;
-                font-size:16px;
-                font-weight:bold;
-            }
-
-            QPushButton:hover{
-                background:#6aa1ff;
-            }
-        """)
+        btn_run.setMinimumHeight(45)
+        btn_run.setStyleSheet("QPushButton { font-weight: bold; }")
 
         btn_run.clicked.connect(
             self.start_task
@@ -173,21 +132,8 @@ class Stage4Page(QWidget):
             "恢复默认参数"
         )
 
-        btn_reset.setMinimumHeight(50)
-
-        btn_reset.setStyleSheet("""
-            QPushButton{
-                background:#666;
-                color:white;
-                border-radius:8px;
-                font-size:16px;
-                font-weight:bold;
-            }
-
-            QPushButton:hover{
-                background:#888;
-            }
-        """)
+        btn_reset.setMinimumHeight(45)
+        btn_reset.setStyleSheet("QPushButton { font-weight: bold; }")
 
         btn_reset.clicked.connect(
             self.reset_params
@@ -208,19 +154,17 @@ class Stage4Page(QWidget):
             label_text,
             widget,
             layout,
-            label_width=260,
+            label_width=120,
     ):
 
         row = QHBoxLayout()
 
         label = QLabel(label_text)
-
+        label.setWordWrap(True)
         label.setFixedWidth(label_width)
 
         row.addWidget(label)
-        row.addWidget(widget)
-
-        row.addStretch()
+        row.addWidget(widget, 1)
 
         layout.addLayout(row)
 
@@ -237,15 +181,6 @@ class Stage4Page(QWidget):
         self.ldm_combo = QComboBox()
 
         self.model_label = QLabel("未选择模型")
-
-        self.model_label.setStyleSheet("""
-            QLabel{
-                background:#1e1f24;
-                border-radius:5px;
-                padding:6px;
-                color:#aaa;
-            }
-        """)
 
         self.vae_combo.currentIndexChanged.connect(
             self.on_vae_changed
@@ -294,13 +229,13 @@ class Stage4Page(QWidget):
         )
 
         row1 = QHBoxLayout()
-        row1.addWidget(QLabel("summary_json"))
-        row1.addWidget(self.summary_json_edit)
+        row1.addWidget(QLabel("JSON"))
+        row1.addWidget(self.summary_json_edit, 1)
         row1.addWidget(btn_summary)
 
         row3 = QHBoxLayout()
-        row3.addWidget(QLabel("输出目录"))
-        row3.addWidget(self.out_dir_edit)
+        row3.addWidget(QLabel("输出"))
+        row3.addWidget(self.out_dir_edit, 1)
         row3.addWidget(btn_out)
 
         g_layout.addLayout(row1)
@@ -329,24 +264,16 @@ class Stage4Page(QWidget):
         self.grid_x_spin.setValue(2)
 
         grid_row = QHBoxLayout()
-
-        grid_row.addWidget(QLabel("GRID_SHAPE"))
-
+        grid_row.addWidget(QLabel("GRID:"))
         grid_row.addWidget(QLabel("Y"))
         grid_row.addWidget(self.grid_y_spin)
-
         grid_row.addWidget(QLabel("Z"))
         grid_row.addWidget(self.grid_z_spin)
-
         grid_row.addWidget(QLabel("X"))
         grid_row.addWidget(self.grid_x_spin)
 
-        btn_refresh = QPushButton("刷新 Manual Patch 表格")
-
-        btn_refresh.clicked.connect(
-            self.build_manual_patch_editor
-        )
-
+        btn_refresh = QPushButton("刷新")
+        btn_refresh.clicked.connect(self.build_manual_patch_editor)
         grid_row.addWidget(btn_refresh)
 
         g_layout.addLayout(grid_row)
@@ -419,14 +346,7 @@ class Stage4Page(QWidget):
             self.manual_group
         )
 
-        tip = QLabel(
-            "请为每个 patch 填写 porosity 与 tau_z"
-        )
-
-        tip.setStyleSheet("""
-            color:#4f8cff;
-            padding:6px;
-        """)
+        tip = QLabel("请为每个 patch 填写 porosity 与 tau_z")
 
         manual_layout.addWidget(tip)
 

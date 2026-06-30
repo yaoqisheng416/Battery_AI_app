@@ -24,15 +24,19 @@ import sys
 import math
 import csv
 import json
+import socket
+import time
+import subprocess
 import numpy as np
 from scipy import ndimage as ndi
 import tifffile
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFileDialog, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox,
-    QSlider, QTextEdit, QGroupBox, QMessageBox, QCheckBox, QDialog, QScrollArea
+    QSlider, QTextEdit, QGroupBox, QMessageBox, QCheckBox, QDialog, QScrollArea,
+    QStackedWidget, QTabWidget
 )
 
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -1112,6 +1116,24 @@ class Volume3DDialog(QDialog):
 # ============================================================
 # Main GUI
 # ============================================================
+class _MenuProxy:
+    """模拟旧版导航菜单，将 setCurrentRow(5) 转译为切换到历史任务 tab。"""
+
+    def __init__(self, window):
+        self._window = window
+
+    def setCurrentRow(self, row):
+        if row == 5:  # 历史任务中心
+            # 切换到深度学习面板
+            self._window._switch_right_panel(1)
+            # 选中"任务历史" tab
+            if hasattr(self._window, '_dl_tabs') and self._window._dl_tabs is not None:
+                for i in range(self._window._dl_tabs.count()):
+                    if self._window._dl_tabs.tabText(i).startswith("任务历史"):
+                        self._window._dl_tabs.setCurrentIndex(i)
+                        break
+
+
 class OpenMesoCellWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -1123,6 +1145,12 @@ class OpenMesoCellWindow(QMainWindow):
         self.imported_psd_path = None
         self.imported_diameters = None
         self.imported_probabilities = None
+        self.api_process = None  # 后端 API 子进程
+
+        # 兼容 stage3/4/5 页面对 main_window.menu 和 main_window.history_page 的调用
+        self.menu = _MenuProxy(self)
+        self.history_page = None  # 在 _init_dl_tabs 中赋值
+
         self._build_ui()
         self._connect_signals()
         self.update_porosity_input_state()
@@ -1131,10 +1159,21 @@ class OpenMesoCellWindow(QMainWindow):
         self.update_psd_preview()
         self.update_view()
 
+        # 自动启动后端 API 服务器，然后加载深度学习页面
+        self._start_api_server()
+        self.dl_loading = True
+        QTimer.singleShot(500, self._init_dl_tabs)
+
     def _build_ui(self):
         root = QWidget()
         self.setCentralWidget(root)
-        main = QHBoxLayout(root)
+        root_layout = QHBoxLayout(root)
+        root_layout.setContentsMargins(6, 6, 6, 6)
+        root_layout.setSpacing(0)
+
+        # ---- 主内容区域（左-中-右三栏） ----
+        main = QHBoxLayout()
+        root_layout.addLayout(main, stretch=1)
 
         left = QVBoxLayout()
         main.addLayout(left, stretch=3)
@@ -1219,9 +1258,41 @@ class OpenMesoCellWindow(QMainWindow):
         log_layout.addWidget(self.log_box)
         mid.addWidget(log_group, stretch=1)
 
-        right_scroll = QScrollArea(); right_scroll.setWidgetResizable(True); right_scroll.setMinimumWidth(430)
-        right_container = QWidget(); right = QVBoxLayout(right_container); right.setContentsMargins(6, 6, 6, 6); right.setSpacing(8)
-        right_scroll.setWidget(right_container); main.addWidget(right_scroll, stretch=2)
+        # ---- 右侧切换面板（按钮 + 内容） ----
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(4)
+
+        # 顶部按钮
+        nav = QHBoxLayout()
+        nav.setSpacing(8)
+        self.btn_dl = QPushButton("深度学习")
+        self.btn_mfg = QPushButton("制造参数")
+        btn_style = (
+            "QPushButton {"
+            "background-color: #1a73e8; color: white; font-weight: bold;"
+            "padding: 8px 20px; border-radius: 6px; font-size: 13px;"
+            "}"
+            "QPushButton:hover { background-color: #1557b0; }"
+            "QPushButton:checked { background-color: #0d47a1; }"
+        )
+        for btn in [self.btn_dl, self.btn_mfg]:
+            btn.setStyleSheet(btn_style)
+            btn.setCheckable(True)
+            nav.addWidget(btn)
+        nav.addStretch()
+        right_panel.addLayout(nav)
+
+        self.right_stack = QStackedWidget()
+        self.right_stack.setMinimumWidth(430)
+        right_panel.addWidget(self.right_stack, stretch=1)
+        main.addLayout(right_panel, stretch=2)
+
+        # -- 第 0 页：制造参数 --
+        right_scroll = QScrollArea(); right_scroll.setWidgetResizable(True)
+        right_container = QWidget(); right = QVBoxLayout(right_container)
+        right.setContentsMargins(6, 6, 6, 6); right.setSpacing(8)
+        right_scroll.setWidget(right_container)
+        self.right_stack.addWidget(right_scroll)
 
         manuf_group = QGroupBox("Electrode Manufacturing Parameters")
         manuf = QGridLayout(manuf_group)
@@ -1291,12 +1362,24 @@ class OpenMesoCellWindow(QMainWindow):
         right.addWidget(adv_group)
         right.addStretch(1)
 
+        # -- 第 1 页：深度学习（lazy init，首次点击"深度学习"时加载） --
+        self.dl_container = QWidget()
+        self.dl_container_layout = QVBoxLayout(self.dl_container)
+        self.dl_container_layout.setContentsMargins(0, 0, 0, 0)
+        self.right_stack.addWidget(self.dl_container)
+        self.dl_initialized = False
+
     def _connect_signals(self):
         self.btn_xy.clicked.connect(lambda: self.set_plane("XY"))
         self.btn_xz.clicked.connect(lambda: self.set_plane("XZ"))
         self.btn_yz.clicked.connect(lambda: self.set_plane("YZ"))
         self.btn_3d.clicked.connect(self.open_3d_view)
         self.btn_clear.clicked.connect(self.clear_volume)
+        # 顶部导航切换
+        self.btn_mfg.clicked.connect(lambda: self._switch_right_panel(0))
+        self.btn_dl.clicked.connect(lambda: self._switch_right_panel(1))
+        self.btn_mfg.setChecked(True)
+        self.right_stack.setCurrentIndex(0)
         self.slice_slider.valueChanged.connect(self.update_view)
         self.btn_generate.clicked.connect(self.generate_electrode)
         self.btn_regenerate_cbd.clicked.connect(self.regenerate_cbd)
@@ -1316,6 +1399,147 @@ class OpenMesoCellWindow(QMainWindow):
         self.combo_porosity_mode.currentIndexChanged.connect(self.update_parameter_preview)
         self.combo_psd.currentIndexChanged.connect(self.update_psd_input_state)
         self.combo_psd.currentIndexChanged.connect(self.update_psd_preview)
+
+    # ======================== 后端 API 服务器管理 ========================
+
+    def _start_api_server(self):
+        """启动后端 API 服务器（如未运行）。"""
+        # 先检查端口是否已被占用（服务器可能已在运行）
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        result = sock.connect_ex(('127.0.0.1', 8001))
+        sock.close()
+        if result == 0:
+            self.log("后端 API 服务器已在运行 (port 8001)")
+            return
+
+        api_script = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "backend", "api_server.py"
+        )
+        python_exe = sys.executable
+        project_root = os.path.dirname(os.path.abspath(__file__))
+
+        try:
+            self.api_process = subprocess.Popen(
+                [python_exe, api_script],
+                cwd=project_root,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            # 等待服务器就绪（最多 15 秒）
+            for _ in range(30):
+                time.sleep(0.5)
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                r = sock.connect_ex(('127.0.0.1', 8001))
+                sock.close()
+                if r == 0:
+                    self.log("后端 API 服务器已启动 (port 8001)")
+                    return
+            self.log("⚠ 后端 API 服务器启动超时，请手动检查")
+        except Exception as e:
+            self.log(f"⚠ 后端 API 服务器启动失败: {e}")
+
+    def _stop_api_server(self):
+        """关闭后端 API 子进程。"""
+        if self.api_process is not None:
+            try:
+                self.api_process.terminate()
+                self.api_process.wait(timeout=5)
+                self.log("后端 API 服务器已停止")
+            except Exception:
+                try:
+                    self.api_process.kill()
+                except Exception:
+                    pass
+            self.api_process = None
+
+    def closeEvent(self, event):
+        """窗口关闭时清理后端子进程。"""
+        self._stop_api_server()
+        super().closeEvent(event)
+
+    # ======================== 右侧面板切换 ========================
+
+    def _switch_right_panel(self, index):
+        """切换右侧面板：0=制造参数, 1=深度学习"""
+        if index == 1 and self.dl_loading:
+            QMessageBox.information(self, "请稍等", "后台正在加载'深度学习'")
+            self.btn_mfg.setChecked(True)
+            self.btn_dl.setChecked(False)
+            return
+        self.right_stack.setCurrentIndex(index)
+        self.btn_mfg.setChecked(index == 0)
+        self.btn_dl.setChecked(index == 1)
+
+    def _init_dl_tabs(self):
+        """后台加载深度学习 Stage 页面（单个失败不影响其余）。"""
+        # 清空占位
+        while self.dl_container_layout.count():
+            item = self.dl_container_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        tabs = QTabWidget()
+
+        # 每个 Stage 独立 try，一个失败不影响其他
+        _stages = [
+            ("Stage1: VAE",    lambda: __import__('pages.stage1_page', fromlist=['Stage1Page']).Stage1Page()),
+            ("Stage2: LDM",    lambda: __import__('pages.stage2_page', fromlist=['Stage2Page']).Stage2Page()),
+            ("Stage3: 条件生成", lambda: __import__('pages.stage3_page', fromlist=['Stage3Page']).Stage3Page(self)),
+            ("Stage4: 特定体积", lambda: __import__('pages.stage4_page', fromlist=['Stage4Page']).Stage4Page(self)),
+            ("Stage5: CBD/参数", lambda: __import__('pages.stage5_page', fromlist=['Stage5Page']).Stage5Page(self)),
+            ("任务历史",        lambda: __import__('pages.history_page', fromlist=['HistoryPage']).HistoryPage()),
+        ]
+
+        self._stage_pages = {}  # 保存引用，用于切 tab 时自动刷新模型列表
+        self._dl_tabs = tabs
+
+        for name, factory in _stages:
+            try:
+                page = factory()
+                self._stage_pages[name] = page
+                tabs.addTab(self._wrap_scroll(page), name)
+                # 保存 history_page 引用，供 stage3/4/5 的 refresh_task_list 调用
+                if name == "任务历史":
+                    self.history_page = page
+            except Exception as e:
+                print(f"[DL加载] {name} 加载失败: {e}")
+                err_label = QLabel(f"{name}\n加载失败：{e}")
+                err_label.setStyleSheet("color: #c00; padding: 20px;")
+                tabs.addTab(self._wrap_scroll(err_label), name)
+
+        # 切换到 Stage3 / Stage4 时自动重新扫描模型目录
+        tabs.currentChanged.connect(self._on_dl_tab_changed)
+
+        self.dl_container_layout.addWidget(tabs)
+        self.dl_initialized = True
+        self.dl_loading = False
+
+    def _on_dl_tab_changed(self, index):
+        """切换到 Stage3/Stage4 时自动刷新模型列表。"""
+        tab_text = self._dl_tabs.tabText(index)
+        # Stage3 和 Stage4 都有 load_models() 方法
+        refresh_keys = ["Stage3: 条件生成", "Stage4: 特定体积"]
+        for key in refresh_keys:
+            if tab_text.startswith(key[:6]) and key in self._stage_pages:
+                page = self._stage_pages[key]
+                if hasattr(page, 'load_models'):
+                    try:
+                        page.load_models()
+                    except Exception as e:
+                        print(f"[模型刷新] {key} 失败: {e}")
+
+    @staticmethod
+    def _wrap_scroll(widget):
+        """将 widget 包裹在可滚动的 QScrollArea 中。"""
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(widget)
+        return scroll
+
+    def show_message(self, title, text):
+        """兼容 stage3/4/5 页面的 show_message 调用。"""
+        QMessageBox.information(self, title, text)
 
     def log(self, text):
         self.log_box.append(str(text))

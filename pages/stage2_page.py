@@ -6,7 +6,12 @@ import traceback
 import numpy as np
 
 # 确保项目根目录在 sys.path，以便 import backend 模块
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 与 backend/api_server.py 的 get_base_dir() 保持一致：
+#   开发模式 → 项目根目录；打包后 → exe 所在目录
+if getattr(sys, 'frozen', False):
+    _PROJECT_ROOT = os.path.dirname(sys.executable)
+else:
+    _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
@@ -21,9 +26,9 @@ from lightning.pytorch.callbacks import ModelCheckpoint, Callback
 
 from PySide6.QtGui import Qt, QPixmap
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QFileDialog, QTextEdit, QSpinBox, QProgressBar, QMessageBox,
-    QCheckBox,
+    QCheckBox, QGroupBox,
 )
 from PySide6.QtCore import QTimer, QThread, Signal
 
@@ -302,58 +307,56 @@ class Stage2Page(QWidget):
         self.worker = None
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        layout.setSpacing(4)
+        layout.setContentsMargins(2, 2, 2, 2)
 
         # 标题
         title = QLabel("Stage2 LDM：将Stage1产生的数据用于扩散去噪生成学习")
-        title.setMaximumHeight(35)
+        title.setStyleSheet("font-weight: bold;")
         layout.addWidget(title)
 
-        # 数据目录（可选，留空 = 合成数据）
+        # 数据
+        data_group = QGroupBox("数据")
+        data_layout = QVBoxLayout(data_group)
+        data_layout.setSpacing(2); data_layout.setContentsMargins(4, 2, 4, 2)
+
+        r1 = QHBoxLayout(); r1.setSpacing(2)
         self.dataset_edit = QLineEdit()
-        self.dataset_edit.setMaximumHeight(35)
-        self.dataset_edit.setPlaceholderText("留空则自动使用合成数据")
-
-        btn_dataset = QPushButton("选择训练数据目录（可选）")
-        btn_dataset.setMaximumHeight(35)
+        self.dataset_edit.setPlaceholderText("留空则使用合成数据")
+        btn_dataset = QPushButton("选择")
         btn_dataset.clicked.connect(self.select_dataset_dir)
+        r1.addWidget(QLabel("训练数据:")); r1.addWidget(self.dataset_edit, 1); r1.addWidget(btn_dataset)
+        data_layout.addLayout(r1)
 
-        layout.addWidget(self.dataset_edit)
-        layout.addWidget(btn_dataset)
-
-        # 输出目录（可选，留空 = 默认 ldm_checkpoints/）
+        r2 = QHBoxLayout(); r2.setSpacing(2)
         self.output_edit = QLineEdit()
-        self.output_edit.setMaximumHeight(35)
-        self.output_edit.setPlaceholderText("留空默认保存到项目 ldm_checkpoints/ 目录")
-
-        btn_output = QPushButton("选择输出目录（可选）")
-        btn_output.setMaximumHeight(35)
+        self.output_edit.setPlaceholderText("默认保存到 ldm_checkpoints/")
+        btn_output = QPushButton("选择")
         btn_output.clicked.connect(self.select_output_dir)
+        r2.addWidget(QLabel("输出目录:")); r2.addWidget(self.output_edit, 1); r2.addWidget(btn_output)
+        data_layout.addLayout(r2)
+        layout.addWidget(data_group)
 
-        layout.addWidget(self.output_edit)
-        layout.addWidget(btn_output)
+        # 训练参数
+        param_group = QGroupBox("训练参数")
+        param_layout = QHBoxLayout(param_group)
+        param_layout.setSpacing(4); param_layout.setContentsMargins(4, 2, 4, 2)
 
-        # epoch
-        epoch_label = QLabel("训练 Epoch")
-        epoch_label.setMaximumHeight(30)
-        layout.addWidget(epoch_label)
-
+        param_layout.addWidget(QLabel("Epoch:"))
         self.epoch_input = QSpinBox()
-        self.epoch_input.setRange(1, 100000)
-        self.epoch_input.setSingleStep(1)
-        self.epoch_input.setValue(3)  # 快速模式默认 3
-        self.epoch_input.setMaximumHeight(30)
-        layout.addWidget(self.epoch_input)
+        self.epoch_input.setRange(1, 100000); self.epoch_input.setValue(3)
+        param_layout.addWidget(self.epoch_input)
 
-        # 快速模式复选框
-        self.fast_mode_cb = QCheckBox("快速模式（合成数据，约 1 分钟完成）")
+        self.fast_mode_cb = QCheckBox("快速模式（合成数据）")
         self.fast_mode_cb.setChecked(True)
-        self.fast_mode_cb.setMaximumHeight(30)
-        layout.addWidget(self.fast_mode_cb)
+        param_layout.addWidget(self.fast_mode_cb)
+        param_layout.addStretch()
+        layout.addWidget(param_group)
 
         # 开始按钮
         self.start_btn = QPushButton("开始训练")
-        self.start_btn.setMaximumHeight(35)
+        self.start_btn.setMinimumHeight(45)
+        self.start_btn.setStyleSheet("QPushButton { font-weight: bold; }")
         self.start_btn.clicked.connect(self.start_train)
         layout.addWidget(self.start_btn)
 

@@ -44,98 +44,33 @@ class HistoryPage(QWidget):
     # =====================================================
     def init_ui(self):
 
-        root_layout = QHBoxLayout(self)
-
-        splitter = QSplitter(Qt.Horizontal)
-
-        root_layout.addWidget(splitter)
-
-        # =================================================
-        # LEFT
-        # =================================================
-        left = QWidget()
-
-        left_layout = QVBoxLayout(left)
+        root_layout = QVBoxLayout(self)
+        root_layout.setSpacing(6)
 
         title = QLabel("历史任务中心")
-
-        title.setStyleSheet("""
-        font-size:24px;
-        font-weight:bold;
-        padding:10px;
-        """)
-
-        left_layout.addWidget(title)
+        title.setStyleSheet("font-weight: bold; padding: 6px;")
+        root_layout.addWidget(title)
 
         self.task_list = QListWidget()
+        self.task_list.setMaximumHeight(150)
+        self.task_list.itemClicked.connect(self.on_task_clicked)
+        root_layout.addWidget(self.task_list)
 
-        self.task_list.itemClicked.connect(
-            self.on_task_clicked
-        )
+        btn_refresh = QPushButton("刷新任务列表")
+        btn_refresh.clicked.connect(self.load_tasks)
+        root_layout.addWidget(btn_refresh)
 
-        left_layout.addWidget(self.task_list)
+        # 任务信息
+        self.info_label = QLabel("请选择任务")
+        self.info_label.setStyleSheet("padding: 4px;")
+        self.info_label.setWordWrap(True)
+        root_layout.addWidget(self.info_label)
 
-        btn_refresh = QPushButton(
-            "刷新任务列表"
-        )
-
-        btn_refresh.clicked.connect(
-            self.load_tasks
-        )
-
-        left_layout.addWidget(btn_refresh)
-
-        # =================================================
-        # RIGHT
-        # =================================================
-        right = QWidget()
-
-        right_layout = QVBoxLayout(right)
-
-        # =================================================
-        # info
-        # =================================================
-        self.info_label = QLabel(
-            "请选择任务"
-        )
-
-        self.info_label.setStyleSheet("""
-        font-size:18px;
-        padding:10px;
-        """)
-
-        right_layout.addWidget(
-            self.info_label
-        )
-
-        # =================================================
-        # logs
-        # =================================================
-        log_title = QLabel("实时日志")
-
-        right_layout.addWidget(log_title)
-
+        # 日志
+        root_layout.addWidget(QLabel("实时日志"))
         self.log_text = QTextEdit()
-
         self.log_text.setReadOnly(True)
-
-        right_layout.addWidget(
-            self.log_text,
-            1
-        )
-
-        # =================================================
-        # buttons
-        # =================================================
-        btn_layout = QHBoxLayout()
-
-        right_layout.addLayout(btn_layout)
-
-        splitter.addWidget(left)
-
-        splitter.addWidget(right)
-
-        splitter.setSizes([350, 1200])
+        root_layout.addWidget(self.log_text, 1)
 
     # =====================================================
     # load tasks

@@ -43,51 +43,9 @@ class Stage5Page(QWidget):
     def init_ui(self):
 
         root_layout = QVBoxLayout(self)
-
-        title = QLabel(
-            "Stage5 CBD三相电极结构生成与参数拟合"
-        )
-
-        title.setStyleSheet("""
-        font-size:24px;
-        font-weight:bold;
-        color:white;
-        padding:10px;
-        """)
-
-        root_layout.addWidget(title)
+        root_layout.setContentsMargins(0, 0, 0, 0)
 
         self.tabs = QTabWidget()
-
-        #  设置 Tab 标题样式
-        self.tabs.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #444;
-                background: #2b2d31;
-                border-radius: 8px;
-            }
-
-            QTabBar::tab {
-                background: #25262b;
-                color: white;
-                padding: 12px 24px;        /*  内边距，让文字更饱满 */
-                font-size: 14px;           /*  Tab 标题字体大小（从 10 → 14） */
-                font-weight: bold;         /*  加粗 */
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
-                margin-right: 5px;         /*  Tab 之间的间距 */
-            }
-
-            QTabBar::tab:selected {
-                background: #4f8cff;       /*  选中时蓝色背景 */
-                color: white;
-            }
-
-            QTabBar::tab:hover {
-                background: #3a3b3f;       /*  悬停时灰色背景 */
-            }
-        """)
-
         root_layout.addWidget(self.tabs)
 
         # ====================================================
@@ -118,185 +76,82 @@ class Stage5Page(QWidget):
     # TAB1
     # ========================================================
     def build_generate_tab(self):
-        layout = QVBoxLayout(self.tab_generate)  #  改为垂直布局
-        layout.setSpacing(15)
+        layout = QVBoxLayout(self.tab_generate)
+        layout.setSpacing(4)
+        layout.setContentsMargins(2, 2, 2, 2)
 
-        # 顶部提示
-        tip_label = QLabel(
-            "💡 选择.npy文件上传后, 进行参数设置, 点击「开始CBD三相生成」后，任务将提交到「任务中心」,可前往进行查看状态\n"
-            "点解'恢复默认参数'按钮再次输入参数 进行推理。"
-        )
-        tip_label.setWordWrap(True)
-        tip_label.setAlignment(Qt.AlignCenter)
-        tip_label.setStyleSheet("""
-            QLabel {
-                font-size: 12px;
-                color: #4f8cff;
-                padding: 15px;
-                background: #25262b;
-                border-radius: 10px;
-                border: 2px solid #4f8cff;
-            }
-        """)
-        layout.addWidget(tip_label)
+        # 顶部说明
+        tip = QLabel("选择 .npy 文件上传后进行参数设置，点击按钮提交任务到「任务中心」。")
+        tip.setWordWrap(True)
+        tip.setAlignment(Qt.AlignCenter)
+        layout.addWidget(tip)
 
-        # ====================================================
-        # 文件上传
-        # ====================================================
-        file_group = QGroupBox("二相结构文件")
-        file_layout = QVBoxLayout(file_group)
+        # 文件 + 输出
+        io_group = QGroupBox("输入 / 输出")
+        io_layout = QVBoxLayout(io_group)
+        io_layout.setSpacing(2); io_layout.setContentsMargins(4, 2, 4, 2)
 
         self.file_edit = QLineEdit()
-        self.file_edit.setPlaceholderText("请选择 .npy 文件...")
-        self.file_edit.setMinimumWidth(400)
-
-        btn_select_file = QPushButton("选择 .npy 文件")
+        self.file_edit.setPlaceholderText(".npy 文件...")
+        btn_select_file = QPushButton("选择 .npy")
         btn_select_file.clicked.connect(self.select_npy_file)
+        io_layout.addWidget(self.file_edit)
+        io_layout.addWidget(btn_select_file)
 
-        file_layout.addWidget(self.file_edit)
-        file_layout.addWidget(btn_select_file)
-
-        layout.addWidget(file_group)
-
-        # ====================================================
-        # 输出目录
-        # ====================================================
-        out_group = QGroupBox("输出目录")
-        out_layout = QHBoxLayout(out_group)
-
+        out_row = QHBoxLayout(); out_row.setSpacing(2)
         self.gen_out_dir_edit = QLineEdit()
-        self.gen_out_dir_edit.setPlaceholderText("选择输出目录...")
-        self.gen_out_dir_edit.setMinimumWidth(400)
-
+        self.gen_out_dir_edit.setPlaceholderText("输出目录...")
         btn_out = QPushButton("选择")
         btn_out.clicked.connect(self.select_gen_out_dir)
+        out_row.addWidget(QLabel("输出:"))
+        out_row.addWidget(self.gen_out_dir_edit, 1)
+        out_row.addWidget(btn_out)
+        io_layout.addLayout(out_row)
+        layout.addWidget(io_group)
 
-        out_layout.addWidget(QLabel("输出目录"))
-        out_layout.addWidget(self.gen_out_dir_edit)
-        out_layout.addWidget(btn_out)
+        # CBD + Voxel + 高级
+        param_group = QGroupBox("生成参数")
+        param_layout = QVBoxLayout(param_group)
+        param_layout.setSpacing(2); param_layout.setContentsMargins(4, 2, 4, 2)
 
-        layout.addWidget(out_group)
+        r1 = QHBoxLayout(); r1.setSpacing(3)
+        self.target_cbd = QDoubleSpinBox(); self.target_cbd.setDecimals(4); self.target_cbd.setValue(0.05); self.target_cbd.setRange(0, 999999)
+        self.w_um = QDoubleSpinBox(); self.w_um.setDecimals(4); self.w_um.setValue(0.08); self.w_um.setRange(0, 999999)
+        r1.addWidget(QLabel("CBD vol:")); r1.addWidget(self.target_cbd)
+        r1.addWidget(QLabel("W(μm):")); r1.addWidget(self.w_um)
+        param_layout.addLayout(r1)
 
-        # ====================================================
-        # CBD参数（水平排列 + 强制范围）
-        # ====================================================
-        cbd_group = QGroupBox("CBD参数")
-        cbd_layout = QHBoxLayout(cbd_group)
-        cbd_layout.setSpacing(15)
+        r2 = QHBoxLayout(); r2.setSpacing(2)
+        self.voxel_x = QDoubleSpinBox(); self.voxel_x.setDecimals(5); self.voxel_x.setValue(0.02791); self.voxel_x.setRange(0, 999999)
+        self.voxel_y = QDoubleSpinBox(); self.voxel_y.setDecimals(5); self.voxel_y.setValue(0.0315); self.voxel_y.setRange(0, 999999)
+        self.voxel_z = QDoubleSpinBox(); self.voxel_z.setDecimals(5); self.voxel_z.setValue(0.02791); self.voxel_z.setRange(0, 999999)
+        r2.addWidget(QLabel("Voxel:")); r2.addWidget(QLabel("X")); r2.addWidget(self.voxel_x)
+        r2.addWidget(QLabel("Y")); r2.addWidget(self.voxel_y)
+        r2.addWidget(QLabel("Z")); r2.addWidget(self.voxel_z)
+        param_layout.addLayout(r2)
 
-        self.target_cbd = QDoubleSpinBox()
-        self.target_cbd.setRange(0, 999999)  # 强制范围
-        self.target_cbd.setSingleStep(0.001)  #  每次增减 0.001
-        self.target_cbd.setDecimals(4)
-        self.target_cbd.setValue(0.05)
-        self.target_cbd.setMinimumWidth(150)
+        r3 = QHBoxLayout(); r3.setSpacing(3)
+        self.max_growth = QDoubleSpinBox(); self.max_growth.setRange(0, 999999); self.max_growth.setDecimals(2); self.max_growth.setValue(4.0)
+        self.remove_isolated = QCheckBox("Remove Isolated CBD"); self.remove_isolated.setChecked(True)
+        r3.addWidget(QLabel("Growth:")); r3.addWidget(self.max_growth)
+        r3.addWidget(self.remove_isolated)
+        param_layout.addLayout(r3)
+        layout.addWidget(param_group)
 
-        self.w_um = QDoubleSpinBox()
-        self.w_um.setRange(0, 999999)  # 强制范围
-        self.w_um.setSingleStep(0.001)  # 每次增减 0.001
-        self.w_um.setDecimals(4)
-        self.w_um.setValue(0.08)
-        self.w_um.setMinimumWidth(150)
-
-        cbd_layout.addWidget(QLabel("target volume fraction:"))
-        cbd_layout.addWidget(self.target_cbd)
-        cbd_layout.addStretch()
-        cbd_layout.addWidget(QLabel("W parameter（CBD特征铺展长度（μm)）:"))
-        cbd_layout.addWidget(self.w_um)
-
-        layout.addWidget(cbd_group)
-
-        # ====================================================
-        # Voxel Size（水平排列 + 强制范围）
-        # ====================================================
-        voxel_group = QGroupBox("Voxel Size")
-        voxel_layout = QHBoxLayout(voxel_group)
-        voxel_layout.setSpacing(15)
-
-        self.voxel_x = QDoubleSpinBox()
-        self.voxel_x.setRange(0, 999999)  #  强制范围
-        self.voxel_x.setSingleStep(0.0001)  #  每次增减 0.0001
-        self.voxel_x.setDecimals(5)
-        self.voxel_x.setValue(0.02791)
-        self.voxel_x.setMinimumWidth(120)
-
-        self.voxel_y = QDoubleSpinBox()
-        self.voxel_y.setRange(0, 999999)
-        self.voxel_y.setSingleStep(0.0001)
-        self.voxel_y.setDecimals(5)
-        self.voxel_y.setValue(0.0315)
-        self.voxel_y.setMinimumWidth(120)
-
-        self.voxel_z = QDoubleSpinBox()
-        self.voxel_z.setRange(0, 999999)
-        self.voxel_z.setSingleStep(0.0001)
-        self.voxel_z.setDecimals(5)
-        self.voxel_z.setValue(0.02791)
-        self.voxel_z.setMinimumWidth(120)
-
-        voxel_layout.addWidget(QLabel("X:"))
-        voxel_layout.addWidget(self.voxel_x)
-        voxel_layout.addWidget(QLabel("Y:"))
-        voxel_layout.addWidget(self.voxel_y)
-        voxel_layout.addWidget(QLabel("Z:"))
-        voxel_layout.addWidget(self.voxel_z)
-        voxel_layout.addStretch()
-
-        layout.addWidget(voxel_group)
-
-        # ====================================================
-        # 高级参数（水平排列 + 强制范围）
-        # ====================================================
-        adv_group = QGroupBox("高级参数")
-        adv_layout = QHBoxLayout(adv_group)
-        adv_layout.setSpacing(15)
-
-        self.max_growth = QDoubleSpinBox()
-        self.max_growth.setRange(0, 999999)  #  强制范围
-        self.max_growth.setSingleStep(0.1)  #  每次增减 0.1
-        self.max_growth.setDecimals(2)
-        self.max_growth.setValue(4.0)
-        self.max_growth.setMinimumWidth(120)
-
-        self.remove_isolated = QCheckBox("Remove Isolated CBD")
-        self.remove_isolated.setChecked(True)
-
-        adv_layout.addWidget(QLabel("Max Growth:"))
-        adv_layout.addWidget(self.max_growth)
-        adv_layout.addStretch()
-        adv_layout.addWidget(self.remove_isolated)
-
-        layout.addWidget(adv_group)
-
-        # ====================================================
-        # 按钮区域（开始生成 + 恢复默认）
-        # ====================================================
-        btn_layout = QHBoxLayout()
-
+        # 按钮
+        btn_layout = QHBoxLayout(); btn_layout.setSpacing(6)
         btn_generate = QPushButton("开始CBD三相生成")
-        btn_generate.setMinimumHeight(50)
+        btn_generate.setMinimumHeight(45)
         btn_generate.clicked.connect(self.start_generate)
-
+        btn_generate.setStyleSheet("QPushButton { font-weight: bold; }")
         btn_reset = QPushButton("恢复默认参数")
-        btn_reset.setMinimumHeight(50)
+        btn_reset.setMinimumHeight(45)
         btn_reset.clicked.connect(self.reset_generate_params)
-        btn_reset.setStyleSheet("""
-            QPushButton {
-                background: #666;
-                color: white;
-                border-radius: 10px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background: #888;
-            }
-        """)
-
+        btn_reset.setStyleSheet("QPushButton { font-weight: bold; }")
         btn_layout.addWidget(btn_generate)
         btn_layout.addWidget(btn_reset)
-
         layout.addLayout(btn_layout)
-        layout.addStretch()  # 底部留白
+        layout.addStretch()
 
     # ========================================================
     # generate
@@ -388,30 +243,15 @@ class Stage5Page(QWidget):
     def reset_generate_params(self):
         """恢复所有参数为默认值"""
 
-        #  清空文件
         self.file_edit.clear()
         self.gen_out_dir_edit.clear()
-
-        #  恢复 CBD 参数
         self.target_cbd.setValue(0.05)
         self.w_um.setValue(0.08)
-
-        #  恢复相标签
-        self.pore_value.setValue(0)  #  默认值（根据你的实际需求）
-        self.am_value.setValue(1)
-        self.cbd_value.setValue(2)
-
-        #  恢复 Voxel Size
         self.voxel_x.setValue(0.02791)
         self.voxel_y.setValue(0.0315)
         self.voxel_z.setValue(0.02791)
-
-        #  恢复高级参数
         self.max_growth.setValue(4.0)
-        # self.seed.setValue(42)
         self.remove_isolated.setChecked(True)
-
-        #  提示
         QMessageBox.information(self, "已恢复", "所有参数已恢复为默认值！")
 
     # ========================================================
@@ -419,188 +259,80 @@ class Stage5Page(QWidget):
     # ========================================================
     def build_fit_tab(self):
         layout = QVBoxLayout(self.tab_fit)
-        layout.setSpacing(15)
+        layout.setSpacing(4)
+        layout.setContentsMargins(2, 2, 2, 2)
 
-        # ====================================================
-        # 顶部提示
-        # ====================================================
-        tip_label = QLabel(
-            "💡 选择真实三相结构目录, 选择输出目录，设置参数后点击「开始CBD参数拟合」任务将提交到「任务中心」,可前往进行查看状态\n"
-            "点解'恢复默认参数'按钮再次输入参数 进行推理。"
-        )
-        tip_label.setWordWrap(True)
-        tip_label.setAlignment(Qt.AlignCenter)
-        tip_label.setStyleSheet("""
-            QLabel {
-                font-size: 12px;
-                color: #4f8cff;
-                padding: 15px;
-                background: #25262b;
-                border-radius: 10px;
-                border: 2px solid #4f8cff;
-            }
-        """)
-        layout.addWidget(tip_label)
+        # 顶部说明
+        tip = QLabel("选择真实三相结构目录，设置参数后点击按钮提交拟合任务到「任务中心」。")
+        tip.setWordWrap(True)
+        tip.setAlignment(Qt.AlignCenter)
+        layout.addWidget(tip)
 
-        # ====================================================
-        # 路径选择（水平排列）
-        # ====================================================
-        path_group = QGroupBox("输入路径")
-        path_layout = QHBoxLayout(path_group)
-        path_layout.setSpacing(15)
+        # 输入输出
+        io_group = QGroupBox("输入 / 输出")
+        io_layout = QVBoxLayout(io_group)
+        io_layout.setSpacing(2); io_layout.setContentsMargins(4, 2, 4, 2)
 
+        r = QHBoxLayout(); r.setSpacing(2)
         self.real_dir_edit = QLineEdit()
-        self.real_dir_edit.setPlaceholderText("选择真实三相结构目录...")
-        self.real_dir_edit.setMinimumWidth(300)
-
-        btn_real = QPushButton("选择真实三相结构目录")
+        self.real_dir_edit.setPlaceholderText("真实三相结构目录...")
+        btn_real = QPushButton("选择")
         btn_real.clicked.connect(self.select_real_dir)
+        r.addWidget(QLabel("输入:")); r.addWidget(self.real_dir_edit, 1); r.addWidget(btn_real)
+        io_layout.addLayout(r)
 
+        r = QHBoxLayout(); r.setSpacing(2)
         self.out_dir_edit = QLineEdit()
-        self.out_dir_edit.setPlaceholderText("选择输出目录...")
-        self.out_dir_edit.setMinimumWidth(300)
-
-        btn_out = QPushButton("选择输出目录")
+        self.out_dir_edit.setPlaceholderText("输出目录...")
+        btn_out = QPushButton("选择")
         btn_out.clicked.connect(self.select_out_dir)
+        r.addWidget(QLabel("输出:")); r.addWidget(self.out_dir_edit, 1); r.addWidget(btn_out)
+        io_layout.addLayout(r)
+        layout.addWidget(io_group)
 
-        path_layout.addWidget(QLabel("真实三相结构目录:"))
-        path_layout.addWidget(self.real_dir_edit)
-        path_layout.addWidget(btn_real)
-        path_layout.addSpacing(20)
-        path_layout.addWidget(QLabel("输出目录:"))
-        path_layout.addWidget(self.out_dir_edit)
-        path_layout.addWidget(btn_out)
+        # W + Voxel + 高级
+        param_group = QGroupBox("拟合参数")
+        param_layout = QVBoxLayout(param_group)
+        param_layout.setSpacing(2); param_layout.setContentsMargins(4, 2, 4, 2)
 
-        layout.addWidget(path_group)
+        r1 = QHBoxLayout(); r1.setSpacing(3)
+        self.w_min = QDoubleSpinBox(); self.w_min.setDecimals(4); self.w_min.setValue(0.02); self.w_min.setRange(0, 999999)
+        self.w_max = QDoubleSpinBox(); self.w_max.setDecimals(4); self.w_max.setValue(0.30); self.w_max.setRange(0, 999999)
+        self.num_w = QSpinBox(); self.num_w.setRange(0, 999999); self.num_w.setValue(20)
+        r1.addWidget(QLabel("w_min:")); r1.addWidget(self.w_min)
+        r1.addWidget(QLabel("w_max:")); r1.addWidget(self.w_max)
+        r1.addWidget(QLabel("num_w:")); r1.addWidget(self.num_w)
+        param_layout.addLayout(r1)
 
-        # ====================================================
-        # W扫描参数（水平排列）
-        # ====================================================
-        w_group = QGroupBox("W扫描参数")
-        w_layout = QHBoxLayout(w_group)
-        w_layout.setSpacing(15)
+        r2 = QHBoxLayout(); r2.setSpacing(2)
+        self.fit_voxel_x = QDoubleSpinBox(); self.fit_voxel_x.setDecimals(5); self.fit_voxel_x.setValue(0.02791); self.fit_voxel_x.setRange(0, 999999)
+        self.fit_voxel_y = QDoubleSpinBox(); self.fit_voxel_y.setDecimals(5); self.fit_voxel_y.setValue(0.0315); self.fit_voxel_y.setRange(0, 999999)
+        self.fit_voxel_z = QDoubleSpinBox(); self.fit_voxel_z.setDecimals(5); self.fit_voxel_z.setValue(0.02791); self.fit_voxel_z.setRange(0, 999999)
+        r2.addWidget(QLabel("Voxel:")); r2.addWidget(QLabel("X")); r2.addWidget(self.fit_voxel_x)
+        r2.addWidget(QLabel("Y")); r2.addWidget(self.fit_voxel_y)
+        r2.addWidget(QLabel("Z")); r2.addWidget(self.fit_voxel_z)
+        param_layout.addLayout(r2)
 
-        self.w_min = QDoubleSpinBox()
-        self.w_min.setRange(0, 999999)
-        self.w_min.setSingleStep(0.01)
-        self.w_min.setDecimals(4)
-        self.w_min.setValue(0.02)
-        self.w_min.setMinimumWidth(120)
+        r3 = QHBoxLayout(); r3.setSpacing(3)
+        self.fit_growth = QDoubleSpinBox(); self.fit_growth.setRange(0, 999999); self.fit_growth.setDecimals(2); self.fit_growth.setValue(4.0)
+        self.fit_remove = QCheckBox("Remove Isolated CBD"); self.fit_remove.setChecked(True)
+        r3.addWidget(QLabel("Growth:")); r3.addWidget(self.fit_growth)
+        r3.addWidget(self.fit_remove)
+        param_layout.addLayout(r3)
+        layout.addWidget(param_group)
 
-        self.w_max = QDoubleSpinBox()
-        self.w_max.setRange(0, 999999)
-        self.w_max.setSingleStep(0.01)
-        self.w_max.setDecimals(4)
-        self.w_max.setValue(0.30)
-        self.w_max.setMinimumWidth(120)
-
-        self.num_w = QSpinBox()
-        self.num_w.setRange(0, 999999)
-        self.num_w.setSingleStep(1)
-        self.num_w.setValue(20)
-        self.num_w.setMinimumWidth(100)
-
-        w_layout.addWidget(QLabel("W Min:"))
-        w_layout.addWidget(self.w_min)
-        w_layout.addWidget(QLabel("W Max:"))
-        w_layout.addWidget(self.w_max)
-        w_layout.addWidget(QLabel("Num W:"))
-        w_layout.addWidget(self.num_w)
-        w_layout.addStretch()
-
-        layout.addWidget(w_group)
-
-        # ====================================================
-        # Voxel Size（水平排列）
-        # ====================================================
-        voxel_group = QGroupBox("Voxel Size")
-        voxel_layout = QHBoxLayout(voxel_group)
-        voxel_layout.setSpacing(15)
-
-        self.fit_voxel_x = QDoubleSpinBox()
-        self.fit_voxel_x.setRange(0, 999999)
-        self.fit_voxel_x.setSingleStep(0.0001)
-        self.fit_voxel_x.setDecimals(5)
-        self.fit_voxel_x.setValue(0.02791)
-        self.fit_voxel_x.setMinimumWidth(120)
-
-        self.fit_voxel_y = QDoubleSpinBox()
-        self.fit_voxel_y.setRange(0, 999999)
-        self.fit_voxel_y.setSingleStep(0.0001)
-        self.fit_voxel_y.setDecimals(5)
-        self.fit_voxel_y.setValue(0.0315)
-        self.fit_voxel_y.setMinimumWidth(120)
-
-        self.fit_voxel_z = QDoubleSpinBox()
-        self.fit_voxel_z.setRange(0, 999999)
-        self.fit_voxel_z.setSingleStep(0.0001)
-        self.fit_voxel_z.setDecimals(5)
-        self.fit_voxel_z.setValue(0.02791)
-        self.fit_voxel_z.setMinimumWidth(120)
-
-        voxel_layout.addWidget(QLabel("X:"))
-        voxel_layout.addWidget(self.fit_voxel_x)
-        voxel_layout.addWidget(QLabel("Y:"))
-        voxel_layout.addWidget(self.fit_voxel_y)
-        voxel_layout.addWidget(QLabel("Z:"))
-        voxel_layout.addWidget(self.fit_voxel_z)
-        voxel_layout.addStretch()
-
-        layout.addWidget(voxel_group)
-
-        # ====================================================
-        # 高级参数（水平排列）
-        # ====================================================
-        adv_group = QGroupBox("高级参数")
-        adv_layout = QHBoxLayout(adv_group)
-        adv_layout.setSpacing(15)
-
-        self.fit_growth = QDoubleSpinBox()
-        self.fit_growth.setRange(0, 999999)
-        self.fit_growth.setSingleStep(0.1)
-        self.fit_growth.setDecimals(2)
-        self.fit_growth.setValue(4.0)
-        self.fit_growth.setMinimumWidth(120)
-
-        self.fit_remove = QCheckBox("Remove Isolated CBD")
-        self.fit_remove.setChecked(True)
-
-        adv_layout.addWidget(QLabel("Max Growth:"))
-        adv_layout.addWidget(self.fit_growth)
-        adv_layout.addWidget(QLabel("Seed:"))
-        # adv_layout.addWidget(self.fit_seed)
-        adv_layout.addStretch()
-        adv_layout.addWidget(self.fit_remove)
-
-        layout.addWidget(adv_group)
-
-        # ====================================================
-        # 按钮区域（用你的真实 start_fit）
-        # ====================================================
-        btn_layout = QHBoxLayout()
-
+        # 按钮
+        btn_layout = QHBoxLayout(); btn_layout.setSpacing(6)
         btn_fit = QPushButton("开始CBD参数拟合")
-        btn_fit.setMinimumHeight(50)
+        btn_fit.setMinimumHeight(45)
         btn_fit.clicked.connect(self.start_fit)
-
+        btn_fit.setStyleSheet("QPushButton { font-weight: bold; }")
         btn_reset = QPushButton("恢复默认参数")
-        btn_reset.setMinimumHeight(50)
+        btn_reset.setMinimumHeight(45)
         btn_reset.clicked.connect(self.reset_fit_params)
-        btn_reset.setStyleSheet("""
-            QPushButton {
-                background: #666;
-                color: white;
-                border-radius: 10px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background: #888;
-            }
-        """)
-
+        btn_reset.setStyleSheet("QPushButton { font-weight: bold; }")
         btn_layout.addWidget(btn_fit)
         btn_layout.addWidget(btn_reset)
-
         layout.addLayout(btn_layout)
         layout.addStretch()
 
@@ -843,9 +575,6 @@ class Stage5Page(QWidget):
 
     def reset_fit_params(self):
         """恢复默认参数"""
-        self.fit_pore.setValue(0)
-        self.fit_am.setValue(1)
-        self.fit_cbd.setValue(2)
         self.w_min.setValue(0.02)
         self.w_max.setValue(0.30)
         self.num_w.setValue(20)
@@ -853,6 +582,5 @@ class Stage5Page(QWidget):
         self.fit_voxel_y.setValue(0.0315)
         self.fit_voxel_z.setValue(0.02791)
         self.fit_growth.setValue(4.0)
-        self.fit_seed.setValue(42)
         self.fit_remove.setChecked(True)
         QMessageBox.information(self, "已恢复", "所有参数已恢复为默认值！")

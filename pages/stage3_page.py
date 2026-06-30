@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QMessageBox,
     QComboBox,
-    QDoubleSpinBox, QFileDialog, QGroupBox, QLineEdit, QSpinBox,
+    QDoubleSpinBox, QFileDialog, QGroupBox, QLineEdit, QSpinBox, QGridLayout,
 )
 
 from api_client import (
@@ -44,61 +44,42 @@ class Stage3Page(QWidget):
         # 顶部提示
         # ============================================
         tip_label = QLabel(
-            "💡 选择模型版本和条件参数，设置输出目录后点击「开始 Stage3 生成，任务将提交到「任务中心」,可前往进行查看状态\n"
-            "点解'恢复默认参数'按钮再次输入参数 进行推理。"
+            "选择模型版本和条件参数，设置输出目录后点击「开始 Stage3 生成」，"
+            "任务将提交到「任务中心」，可前往进行查看状态。\n"
+            "点击「恢复默认参数」按钮再次输入参数进行推理。"
         )
         tip_label.setWordWrap(True)
         tip_label.setAlignment(Qt.AlignCenter)
-        tip_label.setStyleSheet("""
-            QLabel {
-                font-size: 12px;
-                color: #4f8cff;
-                padding: 15px;
-                background: #25262b;
-                border-radius: 10px;
-                border: 2px solid #4f8cff;
-            }
-        """)
         root_layout.addWidget(tip_label)
 
         # ============================================
         # 模型选择区域（ 重构）
         # ============================================
         model_group = QGroupBox("模型选择")
-        model_layout = QHBoxLayout(model_group)
-        model_layout.setSpacing(15)
+        model_layout = QVBoxLayout(model_group)
+        model_layout.setSpacing(6)
 
         #  VAE 模型选择
-        vae_label = QLabel("VAE 模型:")
+        vae_row = QHBoxLayout()
+        vae_row.addWidget(QLabel("VAE 模型:"))
         self.vae_combo = QComboBox()
-        self.vae_combo.setMinimumWidth(250)
         self.vae_combo.currentIndexChanged.connect(self.on_vae_changed)
+        vae_row.addWidget(self.vae_combo, 1)
 
         #  LDM 模型选择
-        ldm_label = QLabel("LDM 模型:")
+        ldm_row = QHBoxLayout()
+        ldm_row.addWidget(QLabel("LDM 模型:"))
         self.ldm_combo = QComboBox()
-        self.ldm_combo.setMinimumWidth(250)
         self.ldm_combo.currentIndexChanged.connect(self.on_ldm_changed)
+        ldm_row.addWidget(self.ldm_combo, 1)
 
         #  显示选中的路径
         self.path_label = QLabel("未选择模型")
         self.path_label.setWordWrap(True)
-        self.path_label.setStyleSheet("""
-                    QLabel {
-                        font-size: 11px;
-                        color: #888;
-                        padding: 5px;
-                        background: #1e1f24;
-                        border-radius: 5px;
-                    }
-                """)
 
-        model_layout.addWidget(vae_label)
-        model_layout.addWidget(self.vae_combo)
-        model_layout.addWidget(ldm_label)
-        model_layout.addWidget(self.ldm_combo)
+        model_layout.addLayout(vae_row)
+        model_layout.addLayout(ldm_row)
         model_layout.addWidget(self.path_label)
-        model_layout.addStretch()
 
         root_layout.addWidget(model_group)
 
@@ -107,28 +88,22 @@ class Stage3Page(QWidget):
         # ============================================
         device_group = QGroupBox("设备与采样")
         device_layout = QHBoxLayout(device_group)
-        device_layout.setSpacing(15)
+        device_layout.setSpacing(8)
 
-        # DEVICE 选择
-        device_label = QLabel("设备 (DEVICE):")
         self.device_combo = QComboBox()
         self.device_combo.addItems(["cuda", "cpu"])
-        self.device_combo.setCurrentText("cuda")  # ⭐ 默认 cuda
-        self.device_combo.setMinimumWidth(150)
+        self.device_combo.setCurrentText("cuda")
         self.device_combo.currentIndexChanged.connect(self.on_device_changed)
 
-        # NUM_SAMPLES 选择
-        samples_label = QLabel("采样数 (NUM_SAMPLES):")
-        self.samples_spin = QSpinBox()  # ⭐ 使用 QSpinBox
-        self.samples_spin.setRange(8, 512)  # ⭐ 范围：8 ~ 512
-        self.samples_spin.setSingleStep(8)  # ⭐ 每次增减 8
-        self.samples_spin.setValue(32)  # ⭐ 默认 32
-        self.samples_spin.setMinimumWidth(150)
+        self.samples_spin = QSpinBox()
+        self.samples_spin.setRange(8, 512)
+        self.samples_spin.setSingleStep(8)
+        self.samples_spin.setValue(32)
         self.samples_spin.valueChanged.connect(self.on_samples_changed)
 
-        device_layout.addWidget(device_label)
+        device_layout.addWidget(QLabel("设备:"))
         device_layout.addWidget(self.device_combo)
-        device_layout.addWidget(samples_label)
+        device_layout.addWidget(QLabel("采样数:"))
         device_layout.addWidget(self.samples_spin)
         device_layout.addStretch()
 
@@ -138,20 +113,17 @@ class Stage3Page(QWidget):
         # 条件参数（水平排列）
         # ============================================
         param_group = QGroupBox("条件参数")
-        param_layout = QHBoxLayout(param_group)
-        param_layout.setSpacing(15)
+        param_layout = QGridLayout(param_group)
+        param_layout.setSpacing(6)
 
-        title2 = QLabel("参数:")
         self.porosity_input = QDoubleSpinBox()
         self.porosity_input.setValue(0.2)
         self.porosity_input.setDecimals(4)
         self.porosity_input.setPrefix("Porosity: ")
-        self.porosity_input.setMinimumWidth(150)
 
         self.tau_input = QDoubleSpinBox()
         self.tau_input.setValue(7)
         self.tau_input.setPrefix("Tau Z: ")
-        self.tau_input.setMinimumWidth(150)
 
         self.surface_input = QDoubleSpinBox()
         self.surface_input.setRange(0, 999999)
@@ -159,13 +131,10 @@ class Stage3Page(QWidget):
         self.surface_input.setSingleStep(10)
         self.surface_input.setValue(1150)
         self.surface_input.setPrefix("Surface Area: ")
-        self.surface_input.setMinimumWidth(150)
 
-        param_layout.addWidget(title2)
-        param_layout.addWidget(self.porosity_input)
-        param_layout.addWidget(self.tau_input)
-        param_layout.addWidget(self.surface_input)
-        param_layout.addStretch()
+        param_layout.addWidget(self.porosity_input, 0, 0)
+        param_layout.addWidget(self.tau_input, 0, 1)
+        param_layout.addWidget(self.surface_input, 1, 0, 1, 2)
 
         root_layout.addWidget(param_group)
 
@@ -196,36 +165,14 @@ class Stage3Page(QWidget):
         btn_layout = QHBoxLayout()
 
         btn_start = QPushButton("开始 Stage3 生成")
-        btn_start.setMinimumHeight(50)
+        btn_start.setMinimumHeight(45)
         btn_start.clicked.connect(self.start_generate)
-        btn_start.setStyleSheet("""
-            QPushButton {
-                background: #4f8cff;
-                color: white;
-                border-radius: 10px;
-                font-weight: bold;
-                font-size: 16px;
-            }
-            QPushButton:hover {
-                background: #6aa1ff;
-            }
-        """)
+        btn_start.setStyleSheet("QPushButton { font-weight: bold; }")
 
         btn_reset = QPushButton("恢复默认参数")
-        btn_reset.setMinimumHeight(50)
+        btn_reset.setMinimumHeight(45)
         btn_reset.clicked.connect(self.reset_params)
-        btn_reset.setStyleSheet("""
-            QPushButton {
-                background: #666;
-                color: white;
-                border-radius: 10px;
-                font-weight: bold;
-                font-size: 16px;
-            }
-            QPushButton:hover {
-                background: #888;
-            }
-        """)
+        btn_reset.setStyleSheet("QPushButton { font-weight: bold; }")
 
         btn_layout.addWidget(btn_start)
         btn_layout.addWidget(btn_reset)

@@ -592,27 +592,30 @@ def postprocess_solid_topology(bin_volume: np.ndarray, cfg: Dict) -> np.ndarray:
 # ============================================================
 
 def load_ldm_model(ckpt_path: str, device: torch.device) -> LatentDiffusionModule:
-    config = LatentDiffusionConfig(
-        latent_channels=4,
-        latent_size=16,
-        cond_dim=4,   # 这里按你当前真正训练的 4 条件模型来
-        cond_embed_dim=128,
-        time_embed_dim=128,
-        model_channels=64,
-        channel_mult=(1, 2, 4),
-        dropout=0.0,
-        num_timesteps=1000,
-        beta_start=1e-4,
-        beta_end=2e-2,
-        lr=1e-4,
-        weight_decay=1e-4,
-    )
+    # 从 checkpoint 自动读取模型配置，兼容快速训练产出的小模型
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    hp = ckpt.get("hyper_parameters", {})
+    cfg_dict = hp.get("config", None)
+
+    if cfg_dict is not None:
+        if hasattr(cfg_dict, "__dataclass_fields__"):
+            cfg_dict = {k: v for k, v in cfg_dict.__dict__.items() if not k.startswith("_")}
+        config = LatentDiffusionConfig(**cfg_dict)
+        print(f"[LDM] 从 checkpoint 自动检测配置: channels={config.model_channels}, mult={config.channel_mult}, timesteps={config.num_timesteps}")
+    else:
+        # 兜底：默认完整配置
+        config = LatentDiffusionConfig(
+            latent_channels=4, latent_size=16, cond_dim=4,
+            cond_embed_dim=128, time_embed_dim=128,
+            model_channels=64, channel_mult=(1, 2, 4),
+            dropout=0.0, num_timesteps=1000,
+            beta_start=1e-4, beta_end=2e-2,
+            lr=1e-4, weight_decay=1e-4,
+        )
+        print("[LDM] 使用默认配置")
 
     model = LatentDiffusionModule.load_from_checkpoint(
-        ckpt_path,
-        config=config,
-        map_location=device,
-        weights_only=False,
+        ckpt_path, config=config, map_location=device, weights_only=False,
     )
     model.eval()
     model.to(device)
@@ -620,40 +623,54 @@ def load_ldm_model(ckpt_path: str, device: torch.device) -> LatentDiffusionModul
 
 
 def load_vae_model(ckpt_path: str, device: torch.device) -> VAEModule:
-    net_config = VAENetConfig(
-        dimension=3,
-        in_channels=1,
-        out_channels=1,
-        z_dim=4,
-        ch=32,
-        ch_mult=[1, 2, 4, 4],
-        num_res_blocks=2,
-        resolution=128,
-        num_groups=16,
-        use_attention=False,
-        final_activation="sigmoid",
-    )
+    # 从 checkpoint 自动读取模型配置，兼容快速训练产出的小模型
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    hp = ckpt.get("hyper_parameters", {})
 
-    vae_config = VAEModuleConfig(
-        kl_weight=1e-5,
-        kl_start=0.0,
-        kl_max=1e-5,
-        kl_warmup_steps=5000,
-        reconstruction_loss="mse",
-        lr=1e-4,
-        scheduler_type="none",
-    )
+    # --- VAE net config ---
+    net_cfg_raw = hp.get("net_config", None)
+    if net_cfg_raw is not None:
+        if hasattr(net_cfg_raw, "__dataclass_fields__"):
+            net_cfg_dict = {k: v for k, v in net_cfg_raw.__dict__.items() if not k.startswith("_")}
+        else:
+            net_cfg_dict = dict(net_cfg_raw)
+        net_config = VAENetConfig(**net_cfg_dict)
+        print(f"[VAE] 从 checkpoint 自动检测配置: z_dim={net_config.z_dim}, ch={net_config.ch}, mult={net_config.ch_mult}, res={net_config.resolution}")
+    else:
+        net_config = VAENetConfig(
+            dimension=3, in_channels=1, out_channels=1,
+            z_dim=4, ch=32, ch_mult=[1, 2, 4, 4], num_res_blocks=2,
+            resolution=128, num_groups=16, use_attention=False,
+            final_activation="sigmoid",
+        )
+        print("[VAE] 使用默认网络配置")
+
+    # --- VAE module config ---
+    vae_cfg_raw = hp.get("config", None)
+    if vae_cfg_raw is not None:
+        if hasattr(vae_cfg_raw, "__dataclass_fields__"):
+            vae_cfg_dict = {k: v for k, v in vae_cfg_raw.__dict__.items() if not k.startswith("_")}
+        else:
+            vae_cfg_dict = dict(vae_cfg_raw)
+        # 过滤掉推理时不需要的参数
+        safe_keys = {"kl_weight", "kl_start", "kl_max", "kl_warmup_steps",
+                     "reconstruction_loss", "lr", "scheduler_type",
+                     "log_val_slices", "val_slice_log_interval", "max_log_images"}
+        filtered = {k: v for k, v in vae_cfg_dict.items() if k in safe_keys}
+        vae_config = VAEModuleConfig(**filtered)
+    else:
+        vae_config = VAEModuleConfig(
+            kl_weight=1e-5, kl_start=0.0, kl_max=1e-5, kl_warmup_steps=5000,
+            reconstruction_loss="mse", lr=1e-4, scheduler_type="none",
+        )
+        print("[VAE] 使用默认模块配置")
 
     net = VAENet(net_config)
 
     model = VAEModule.load_from_checkpoint(
-        ckpt_path,
-        encdec=net,
-        config=vae_config,
-        conditional=False,
-        verbose=False,
-        map_location=device,
-        weights_only=False,
+        ckpt_path, encdec=net, config=vae_config,
+        conditional=False, verbose=False,
+        map_location=device, weights_only=False,
     )
     model.eval()
     model.to(device)

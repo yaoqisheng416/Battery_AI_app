@@ -313,6 +313,9 @@ class VAEModule(L.LightningModule):
             self.initial_norm = batchnorm.IdentityBatchNorm()
 
         self.save_hyperparameters(ignore=["encdec"])
+        # 同时保存 encdec 的网络配置，以便推理时自动匹配模型结构
+        if hasattr(encdec, 'config'):
+            self.hparams['net_config'] = encdec.config
 
     @property
     def encoder(self):
