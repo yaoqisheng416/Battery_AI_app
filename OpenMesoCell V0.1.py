@@ -31,6 +31,23 @@ import numpy as np
 from scipy import ndimage as ndi
 import tifffile
 
+# ============================================
+# 单实例锁 — 防止重复启动
+# ============================================
+
+LOCK_PORT = 54322
+
+
+def already_running():
+    """检查是否已有实例在运行"""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", LOCK_PORT))
+        return False
+    except socket.error:
+        return True
+
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QFileDialog, QVBoxLayout, QHBoxLayout,
@@ -1404,12 +1421,15 @@ class OpenMesoCellWindow(QMainWindow):
 
     def _start_api_server(self):
         """启动后端 API 服务器（如未运行）。"""
+        self.api_ready = False  # 标志位：API 是否可用
+
         # 先检查端口是否已被占用（服务器可能已在运行）
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         result = sock.connect_ex(('127.0.0.1', 8001))
         sock.close()
         if result == 0:
             self.log("后端 API 服务器已在运行 (port 8001)")
+            self.api_ready = True
             return
 
         api_script = os.path.join(
@@ -1426,47 +1446,89 @@ class OpenMesoCellWindow(QMainWindow):
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            # 等待服务器就绪（最多 15 秒）
-            for _ in range(30):
+            # 等待服务器就绪（最多 30 秒）
+            for _ in range(60):
                 time.sleep(0.5)
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 r = sock.connect_ex(('127.0.0.1', 8001))
                 sock.close()
                 if r == 0:
                     self.log("后端 API 服务器已启动 (port 8001)")
+                    self.api_ready = True
                     return
-            self.log("⚠ 后端 API 服务器启动超时，请手动检查")
+
+            # 超时：提示用户
+            self.log("⚠ 后端 API 服务器启动超时")
+            QMessageBox.critical(
+                self,
+                "后端服务启动失败",
+                "API 服务器启动超时（30秒）。\n\n"
+                "深度学习功能将无法使用。\n"
+                "请关闭本应用后重新启动。\n\n"
+                "如问题持续，请检查后台是否已有残留进程占用端口 8001。"
+            )
         except Exception as e:
             self.log(f"⚠ 后端 API 服务器启动失败: {e}")
+            QMessageBox.critical(
+                self,
+                "后端服务启动失败",
+                f"API 服务器启动出错：{e}\n\n"
+                "深度学习功能将无法使用。\n"
+                "请关闭本应用后重新启动。"
+            )
 
     def _stop_api_server(self):
-        """关闭后端 API 子进程。"""
+        """关闭后端 API 子进程（含子进程树）。"""
         if self.api_process is not None:
             try:
-                self.api_process.terminate()
-                self.api_process.wait(timeout=5)
+                pid = self.api_process.pid
+                # Windows: 使用 taskkill /T 杀死整个进程树
+                if sys.platform == "win32" and pid:
+                    subprocess.run(
+                        ['taskkill', '/F', '/T', '/PID', str(pid)],
+                        capture_output=True
+                    )
+                else:
+                    self.api_process.terminate()
+                    try:
+                        self.api_process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        self.api_process.kill()
                 self.log("后端 API 服务器已停止")
-            except Exception:
-                try:
-                    self.api_process.kill()
-                except Exception:
-                    pass
-            self.api_process = None
+            except Exception as e:
+                self.log(f"停止 API 服务器时出错: {e}")
+            finally:
+                self.api_process = None
 
     def closeEvent(self, event):
         """窗口关闭时清理后端子进程。"""
         self._stop_api_server()
         super().closeEvent(event)
 
+    def cleanup_on_exit(self):
+        """应用退出时清理所有后台进程（aboutToQuit 兜底）。"""
+        self._stop_api_server()
+
     # ======================== 右侧面板切换 ========================
 
     def _switch_right_panel(self, index):
         """切换右侧面板：0=制造参数, 1=深度学习"""
-        if index == 1 and self.dl_loading:
-            QMessageBox.information(self, "请稍等", "后台正在加载'深度学习'")
-            self.btn_mfg.setChecked(True)
-            self.btn_dl.setChecked(False)
-            return
+        if index == 1:
+            if self.dl_loading:
+                QMessageBox.information(self, "请稍等", "后台正在加载'深度学习'")
+                self.btn_mfg.setChecked(True)
+                self.btn_dl.setChecked(False)
+                return
+            if not getattr(self, 'api_ready', True):
+                QMessageBox.warning(
+                    self,
+                    "深度学习不可用",
+                    "后端 API 服务器未启动，深度学习功能无法使用。\n"
+                    "请关闭应用后重新启动。"
+                )
+                self.btn_mfg.setChecked(True)
+                self.btn_dl.setChecked(False)
+                return
         self.right_stack.setCurrentIndex(index)
         self.btn_mfg.setChecked(index == 0)
         self.btn_dl.setChecked(index == 1)
@@ -1821,9 +1883,23 @@ class OpenMesoCellWindow(QMainWindow):
 
 
 def main():
+    # 单实例检查
+    if already_running():
+        app = QApplication(sys.argv)
+        QMessageBox.warning(
+            None,
+            "提示",
+            "OpenMesoCell 已经在运行中，请勿重复启动"
+        )
+        sys.exit(0)
+
     app = QApplication(sys.argv)
     win = OpenMesoCellWindow()
     win.show()
+
+    # 确保关闭时清理所有后台进程
+    app.aboutToQuit.connect(win.cleanup_on_exit)
+
     sys.exit(app.exec())
 
 

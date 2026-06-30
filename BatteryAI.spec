@@ -107,7 +107,7 @@ exe = EXE(
 
     exclude_binaries=True,
 
-    name='OpenMesoCell V0.1',
+    name='OpenMesoCell V0.9',
 
     debug=False,
 
@@ -135,5 +135,5 @@ coll = COLLECT(
 
     upx_exclude=[],
 
-    name='OpenMesoCell V0.1'
+    name='OpenMesoCell V0.9'
 )
